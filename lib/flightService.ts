@@ -3,30 +3,34 @@
  * ─────────────────────────────────────────────────────────────────
  * تكامل رسمي مع Duffel Flights API.
  *
- * يرجّع النتائج بنفس شكل بيانات Amadeus اللي الواجهة (app/page.tsx)
- * بتتوقّعها، عشان ما نحتاج نغيّر أي حاجة في العرض:
- *
- *   { data: [ { id, price, numberOfBookableSeats, itineraries: [
- *       { duration, segments: [ { departure, arrival, carrierCode } ] }
- *   ] } ] }
+ * يرجّع النتائج بشكل متوافق مع الواجهة (app/page.tsx) ويشمل كل
+ * البيانات الغنية: لوغو الشركة، رقم الرحلة، نوع الطائرة، درجة المقصورة،
+ * الحقائب، قابلية الاسترجاع/التعديل، وانبعاثات الكربون.
  *
  * الإعداد:
- *   1. سجّل في https://duffel.com واطلع Access Token (Test mode).
- *   2. حطّه في .env.local :  DUFFEL_API_KEY=duffel_test_xxx
+ *   1. سجّل في https://duffel.com واطلع Access Token (Test/Live).
+ *   2. حطّه في .env.local :  DUFFEL_API_KEY=duffel_xxx
  *
  * بدون توكن → يرجّع بيانات تجريبية (mock) عشان تشوف الفلو شغّال فوراً.
  */
 
+import { getAirlineName, getAirlineLogo } from "@/lib/airlines"
+
 const DUFFEL_API_URL = "https://api.duffel.com/air/offer_requests?return_offers=true"
 const DUFFEL_VERSION = "v2"
 
-// ─── الأنواع (بشكل Amadeus المتوافق مع الواجهة) ──────────────────────────────
+// ─── الأنواع ─────────────────────────────────────────────────────────────────
 
 export interface FlightSegment {
   departure: { iataCode: string; at: string }
   arrival: { iataCode: string; at: string }
   carrierCode: string
   carrierName: string
+  logo: string
+  flightNumber: string | null
+  aircraft: string | null
+  cabin: string | null
+  duration: string | null
 }
 
 export interface FlightItinerary {
@@ -38,13 +42,19 @@ export interface Flight {
   id: string
   price: { total: string; currency: string }
   numberOfBookableSeats: number | null
+  airlineLogo: string
+  cabinClass: string
+  baggage: { checked: number; carryOn: number }
+  refundable: boolean
+  changeable: boolean
+  emissionsKg: number | null
   itineraries: FlightItinerary[]
 }
 
 export interface SearchParams {
-  origin: string // كود IATA، مثال "DXB"
-  destination: string // كود IATA، مثال "LHR"
-  departureDate: string // YYYY-MM-DD
+  origin: string
+  destination: string
+  departureDate: string
   adults?: number
 }
 
@@ -53,33 +63,89 @@ export interface FlightSearchResponse {
   meta: { source: "duffel" | "mock"; currency: string }
 }
 
-// ─── تحويل عرض Duffel إلى شكل الواجهة ────────────────────────────────────────
+// ─── مساعدات التحويل ─────────────────────────────────────────────────────────
+
+const CABIN_AR: Record<string, string> = {
+  economy: "الاقتصادية",
+  premium_economy: "الاقتصادية المميزة",
+  business: "رجال الأعمال",
+  first: "الأولى",
+}
+
+function extractBaggage(offer: any): { checked: number; carryOn: number } {
+  const pax = offer?.slices?.[0]?.segments?.[0]?.passengers?.[0]
+  const bags: any[] = pax?.baggages ?? []
+  const sum = (type: string) =>
+    bags.filter((b) => b.type === type).reduce((s, b) => s + (b.quantity || 0), 0)
+  return { checked: sum("checked"), carryOn: sum("carry_on") }
+}
 
 function mapDuffelOffer(offer: any): Flight {
+  const cabinRaw = offer?.slices?.[0]?.segments?.[0]?.passengers?.[0]?.cabin_class as string | undefined
+  const cabinMarketing = offer?.slices?.[0]?.segments?.[0]?.passengers?.[0]?.cabin_class_marketing_name as string | undefined
+
   const itineraries: FlightItinerary[] = (offer.slices ?? []).map((slice: any) => ({
     duration: slice.duration ?? "",
-    segments: (slice.segments ?? []).map((seg: any) => ({
-      departure: { iataCode: seg.origin?.iata_code ?? "", at: seg.departing_at ?? "" },
-      arrival: { iataCode: seg.destination?.iata_code ?? "", at: seg.arriving_at ?? "" },
-      carrierCode: seg.marketing_carrier?.iata_code ?? offer.owner?.iata_code ?? "",
-      carrierName: seg.marketing_carrier?.name ?? offer.owner?.name ?? "طيران",
-    })),
+    segments: (slice.segments ?? []).map((seg: any) => {
+      const mc = seg.marketing_carrier ?? {}
+      const code = mc.iata_code ?? offer.owner?.iata_code ?? ""
+      return {
+        departure: { iataCode: seg.origin?.iata_code ?? "", at: seg.departing_at ?? "" },
+        arrival: { iataCode: seg.destination?.iata_code ?? "", at: seg.arriving_at ?? "" },
+        carrierCode: code,
+        carrierName: mc.name ?? offer.owner?.name ?? getAirlineName(code),
+        logo: mc.logo_symbol_url ?? getAirlineLogo(code),
+        flightNumber: seg.marketing_carrier_flight_number ? `${code}${seg.marketing_carrier_flight_number}` : null,
+        aircraft: seg.aircraft?.name ?? null,
+        cabin: seg.passengers?.[0]?.cabin_class ? CABIN_AR[seg.passengers[0].cabin_class] ?? null : null,
+        duration: seg.duration ?? null,
+      }
+    }),
   }))
 
   return {
     id: offer.id,
     price: { total: offer.total_amount, currency: offer.total_currency },
     numberOfBookableSeats: null,
+    airlineLogo: offer.owner?.logo_symbol_url ?? getAirlineLogo(offer.owner?.iata_code),
+    cabinClass: cabinMarketing ?? (cabinRaw ? CABIN_AR[cabinRaw] ?? cabinRaw : "الاقتصادية"),
+    baggage: extractBaggage(offer),
+    refundable: Boolean(offer.conditions?.refund_before_departure?.allowed),
+    changeable: Boolean(offer.conditions?.change_before_departure?.allowed),
+    emissionsKg: offer.total_emissions_kg ? Number(offer.total_emissions_kg) : null,
     itineraries,
   }
 }
 
-// ─── بيانات تجريبية (لمّا ما يكون في توكن) ───────────────────────────────────
+// ─── بيانات تجريبية غنية ─────────────────────────────────────────────────────
+
+function seg(
+  code: string,
+  from: string,
+  to: string,
+  at: string,
+  arr: string,
+  aircraft: string,
+  duration: string,
+): FlightSegment {
+  return {
+    departure: { iataCode: from, at },
+    arrival: { iataCode: to, at: arr },
+    carrierCode: code,
+    carrierName: getAirlineName(code),
+    logo: getAirlineLogo(code),
+    flightNumber: `${code}${100 + Math.floor(Math.random() * 800)}`,
+    aircraft,
+    cabin: "الاقتصادية",
+    duration,
+  }
+}
 
 function mockFlights({ origin, destination, departureDate }: Required<SearchParams>): FlightSearchResponse {
   const base = departureDate ? new Date(`${departureDate}T00:00:00Z`) : new Date()
-  const at = (h: number, m = 0) => {
+  const at = (h: number, m = 0, dayPlus = 0) => {
     const d = new Date(base)
+    d.setUTCDate(d.getUTCDate() + dayPlus)
     d.setUTCHours(h, m)
     return d.toISOString()
   }
@@ -89,40 +155,32 @@ function mockFlights({ origin, destination, departureDate }: Required<SearchPara
       id: "mock_1",
       price: { total: "312.40", currency: "USD" },
       numberOfBookableSeats: 6,
+      airlineLogo: getAirlineLogo("EK"),
+      cabinClass: "الاقتصادية",
+      baggage: { checked: 2, carryOn: 1 },
+      refundable: true,
+      changeable: true,
+      emissionsKg: 410,
       itineraries: [
-        {
-          duration: "PT7H15M",
-          segments: [
-            {
-              departure: { iataCode: origin, at: at(9, 30) },
-              arrival: { iataCode: destination, at: at(16, 45) },
-              carrierCode: "EK",
-              carrierName: "Emirates (تجريبي)",
-            },
-          ],
-        },
+        { duration: "PT7H15M", segments: [seg("EK", origin, destination, at(9, 30), at(16, 45), "Boeing 777-300ER", "PT7H15M")] },
       ],
     },
     {
       id: "mock_2",
       price: { total: "268.90", currency: "USD" },
       numberOfBookableSeats: 3,
+      airlineLogo: getAirlineLogo("TK"),
+      cabinClass: "الاقتصادية",
+      baggage: { checked: 1, carryOn: 1 },
+      refundable: false,
+      changeable: true,
+      emissionsKg: 520,
       itineraries: [
         {
           duration: "PT9H40M",
           segments: [
-            {
-              departure: { iataCode: origin, at: at(2, 10) },
-              arrival: { iataCode: "IST", at: at(6, 0) },
-              carrierCode: "TK",
-              carrierName: "Turkish Airlines (تجريبي)",
-            },
-            {
-              departure: { iataCode: "IST", at: at(8, 20) },
-              arrival: { iataCode: destination, at: at(11, 50) },
-              carrierCode: "TK",
-              carrierName: "Turkish Airlines (تجريبي)",
-            },
+            seg("TK", origin, "IST", at(2, 10), at(6, 0), "Airbus A321neo", "PT3H50M"),
+            seg("TK", "IST", destination, at(8, 20), at(11, 50), "Boeing 737-800", "PT3H30M"),
           ],
         },
       ],
@@ -131,16 +189,32 @@ function mockFlights({ origin, destination, departureDate }: Required<SearchPara
       id: "mock_3",
       price: { total: "401.00", currency: "USD" },
       numberOfBookableSeats: 9,
+      airlineLogo: getAirlineLogo("QR"),
+      cabinClass: "الاقتصادية المميزة",
+      baggage: { checked: 2, carryOn: 1 },
+      refundable: true,
+      changeable: false,
+      emissionsKg: 380,
+      itineraries: [
+        { duration: "PT6H55M", segments: [seg("QR", origin, destination, at(14, 0), at(20, 55), "Airbus A350-900", "PT6H55M")] },
+      ],
+    },
+    {
+      id: "mock_4",
+      price: { total: "233.50", currency: "USD" },
+      numberOfBookableSeats: 4,
+      airlineLogo: getAirlineLogo("MS"),
+      cabinClass: "الاقتصادية",
+      baggage: { checked: 1, carryOn: 1 },
+      refundable: false,
+      changeable: false,
+      emissionsKg: 610,
       itineraries: [
         {
-          duration: "PT6H55M",
+          duration: "PT12H30M",
           segments: [
-            {
-              departure: { iataCode: origin, at: at(14, 0) },
-              arrival: { iataCode: destination, at: at(20, 55) },
-              carrierCode: "QR",
-              carrierName: "Qatar Airways (تجريبي)",
-            },
+            seg("MS", origin, "CAI", at(1, 30), at(4, 30), "Boeing 737-800", "PT3H0M"),
+            seg("MS", "CAI", destination, at(9, 0), at(18, 0, 0), "Airbus A320", "PT6H0M"),
           ],
         },
       ],
@@ -163,8 +237,6 @@ export async function searchFlights(params: SearchParams): Promise<FlightSearchR
   }
 
   const token = process.env.DUFFEL_API_KEY
-
-  // بدون توكن → وضع تجريبي عشان تشوف الفلو شغّال فوراً
   if (!token) {
     return mockFlights({ origin, destination, departureDate, adults })
   }
@@ -200,7 +272,7 @@ export async function searchFlights(params: SearchParams): Promise<FlightSearchR
   const data = offers
     .map(mapDuffelOffer)
     .sort((a, b) => Number.parseFloat(a.price.total) - Number.parseFloat(b.price.total))
-    .slice(0, 10)
+    .slice(0, 20)
 
   const currency = data[0]?.price.currency ?? "USD"
   return { data, meta: { source: "duffel", currency } }

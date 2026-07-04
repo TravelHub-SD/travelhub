@@ -24,6 +24,14 @@ import {
   Briefcase,
   Zap,
   TrendingDown,
+  Luggage,
+  X,
+  SlidersHorizontal,
+  Leaf,
+  Check,
+  RefreshCw,
+  RotateCcw,
+  Info,
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
@@ -78,7 +86,18 @@ export default function Home() {
   const [isLoading, setIsLoading] = useState(false)
   const [searchResults, setSearchResults] = useState<any>(null)
   const [sortBy, setSortBy] = useState<"cheapest" | "fastest" | "nonstop">("cheapest")
+  const [selectedFlight, setSelectedFlight] = useState<any>(null)
+  const [filters, setFilters] = useState<{
+    airlines: string[]
+    stops: "all" | "0" | "1" | "2"
+    maxPrice: number | null
+    baggageOnly: boolean
+    refundableOnly: boolean
+  }>({ airlines: [], stops: "all", maxPrice: null, baggageOnly: false, refundableOnly: false })
   const resultsRef = useRef<HTMLDivElement>(null)
+
+  const resetFilters = () =>
+    setFilters({ airlines: [], stops: "all", maxPrice: null, baggageOnly: false, refundableOnly: false })
 
   const [flightForm, setFlightForm] = useState({ origin: "", destination: "", departureDate: "", adults: "1" })
   const [hotelForm, setHotelForm] = useState({ city: "", checkIn: "", checkOut: "", adults: "1" })
@@ -87,6 +106,8 @@ export default function Home() {
     e.preventDefault()
     setIsLoading(true)
     setSearchResults(null)
+    resetFilters()
+    setSortBy("cheapest")
     try {
       const response = await fetch("/api/flights/search", {
         method: "POST",
@@ -437,177 +458,332 @@ export default function Home() {
 
           {/* Flights */}
           {activeTab === "flights" && searchResults.data && searchResults.data.length > 0 && (() => {
-            const items = searchResults.data.map((flight: any, index: number) => ({
-              flight,
-              index,
-              price: Number.parseFloat(flight.price.total),
-              dur: durationToMinutes(flight.itineraries[0].duration),
-              stops: flight.itineraries[0].segments.length - 1,
-            }))
-            const minPrice = Math.min(...items.map((x: any) => x.price))
-            const minDur = Math.min(...items.map((x: any) => x.dur))
-            const sorted = [...items].sort((a: any, b: any) => {
+            const fmtTime = (t: string) =>
+              new Date(t).toLocaleTimeString(language === "ar" ? "ar-SA" : "en-US", { hour: "2-digit", minute: "2-digit" })
+
+            const allItems = searchResults.data.map((flight: any, index: number) => {
+              const segments = flight.itineraries[0].segments
+              return {
+                flight,
+                index,
+                price: Number.parseFloat(flight.price.total),
+                dur: durationToMinutes(flight.itineraries[0].duration),
+                stops: segments.length - 1,
+                carriers: Array.from(new Set(segments.map((s: any) => s.carrierCode))) as string[],
+                hasBag: (flight.baggage?.checked ?? 0) > 0,
+                refundable: Boolean(flight.refundable),
+              }
+            })
+
+            const priceMax = Math.ceil(Math.max(...allItems.map((x: any) => x.price)))
+            const priceMin = Math.floor(Math.min(...allItems.map((x: any) => x.price)))
+            const allAirlines = Array.from(new Set(allItems.flatMap((x: any) => x.carriers))) as string[]
+            const effectiveMax = filters.maxPrice ?? priceMax
+
+            const filtered = allItems.filter((x: any) => {
+              if (x.price > effectiveMax) return false
+              if (filters.stops === "0" && x.stops !== 0) return false
+              if (filters.stops === "1" && x.stops !== 1) return false
+              if (filters.stops === "2" && x.stops < 2) return false
+              if (filters.baggageOnly && !x.hasBag) return false
+              if (filters.refundableOnly && !x.refundable) return false
+              if (filters.airlines.length && !x.carriers.some((c: string) => filters.airlines.includes(c))) return false
+              return true
+            })
+
+            const minPrice = filtered.length ? Math.min(...filtered.map((x: any) => x.price)) : 0
+            const minDur = filtered.length ? Math.min(...filtered.map((x: any) => x.dur)) : 0
+            const sorted = [...filtered].sort((a: any, b: any) => {
               if (sortBy === "fastest") return a.dur - b.dur
               if (sortBy === "nonstop") return a.stops - b.stops || a.price - b.price
               return a.price - b.price
             })
+
             const sortTabs: { key: typeof sortBy; label: string; icon: any }[] = [
               { key: "cheapest", label: "الأرخص", icon: TrendingDown },
               { key: "fastest", label: "الأسرع", icon: Zap },
               { key: "nonstop", label: "المباشرة أولاً", icon: Plane },
             ]
-            const fmtTime = (t: string) =>
-              new Date(t).toLocaleTimeString(language === "ar" ? "ar-SA" : "en-US", { hour: "2-digit", minute: "2-digit" })
+            const stopOptions: { key: typeof filters.stops; label: string }[] = [
+              { key: "all", label: "الكل" },
+              { key: "0", label: "مباشر" },
+              { key: "1", label: "توقف واحد" },
+              { key: "2", label: "توقفان+" },
+            ]
+            const toggleAirline = (code: string) =>
+              setFilters((f) => ({
+                ...f,
+                airlines: f.airlines.includes(code) ? f.airlines.filter((c) => c !== code) : [...f.airlines, code],
+              }))
 
             return (
-              <div className="space-y-4">
-                {/* Sort tabs */}
-                <div className="inline-flex gap-1 bg-slate-100 p-1 rounded-full mb-1">
-                  {sortTabs.map((t) => (
-                    <button
-                      key={t.key}
-                      onClick={() => setSortBy(t.key)}
-                      className={`flex items-center gap-1.5 px-4 py-2 text-sm font-semibold rounded-full transition-all ${
-                        sortBy === t.key ? "bg-white text-[#1e3a5f] shadow-sm" : "text-slate-500 hover:text-slate-700"
-                      }`}
-                    >
-                      <t.icon className="w-4 h-4" /> {t.label}
+              <div className="grid lg:grid-cols-[260px_1fr] gap-6 items-start">
+                {/* Filters sidebar */}
+                <aside className="bg-white rounded-2xl border border-slate-100 shadow-card p-5 space-y-6 lg:sticky lg:top-20">
+                  <div className="flex items-center justify-between">
+                    <h4 className="font-bold text-[#1e3a5f] flex items-center gap-2">
+                      <SlidersHorizontal className="w-4 h-4 text-[#ff8c42]" /> تصفية النتائج
+                    </h4>
+                    <button onClick={resetFilters} className="text-xs text-[#ff8c42] hover:underline flex items-center gap-1">
+                      <RotateCcw className="w-3 h-3" /> مسح
                     </button>
-                  ))}
-                </div>
+                  </div>
 
-                {sorted.map(({ flight, index, price, dur, stops }: any) => {
-                  const prices = formatPrice(flight.price.total)
-                  const segments = flight.itineraries[0].segments
-                  const first = segments[0]
-                  const last = segments[segments.length - 1]
-                  const carriers = Array.from(new Set(segments.map((s: any) => s.carrierCode))) as string[]
-                  const airlineNames = carriers.map((c) => getAirlineName(c, language)).join("، ")
-                  const stopCities = segments.slice(0, -1).map((s: any) => s.arrival.iataCode)
-                  const offset = dayOffset(first.departure.at, last.arrival.at)
-                  const isCheapest = price === minPrice
-                  const isFastest = dur === minDur
+                  {/* Price */}
+                  <div className="space-y-2">
+                    <label className="text-sm font-semibold text-slate-700">أقصى سعر</label>
+                    <input
+                      type="range"
+                      min={priceMin}
+                      max={priceMax}
+                      value={effectiveMax}
+                      onChange={(e) => setFilters((f) => ({ ...f, maxPrice: Number(e.target.value) }))}
+                      className="w-full accent-[#ff8c42]"
+                    />
+                    <p className="text-xs text-slate-500">
+                      حتى <span className="font-bold text-[#ff8c42]">{formatPrice(String(effectiveMax)).sdg} ج.س</span>
+                    </p>
+                  </div>
 
-                  return (
-                    <Card
-                      key={index}
-                      className="border border-slate-100 rounded-2xl shadow-card hover:shadow-card-hover transition-all overflow-hidden animate-rise"
-                    >
-                      <CardContent className="p-0">
-                        {/* badges strip */}
-                        {(isCheapest || isFastest) && (
-                          <div className="flex gap-2 px-5 pt-4">
-                            {isCheapest && (
-                              <span className="inline-flex items-center gap-1 text-xs font-bold px-2.5 py-1 rounded-md bg-emerald-500 text-white">
-                                <TrendingDown className="w-3 h-3" /> الأرخص
-                              </span>
-                            )}
-                            {isFastest && (
-                              <span className="inline-flex items-center gap-1 text-xs font-bold px-2.5 py-1 rounded-md bg-[#1e3a5f] text-white">
-                                <Zap className="w-3 h-3" /> الأسرع
-                              </span>
-                            )}
-                          </div>
-                        )}
+                  {/* Stops */}
+                  <div className="space-y-2">
+                    <label className="text-sm font-semibold text-slate-700">التوقفات</label>
+                    <div className="grid grid-cols-2 gap-2">
+                      {stopOptions.map((s) => (
+                        <button
+                          key={s.key}
+                          onClick={() => setFilters((f) => ({ ...f, stops: s.key }))}
+                          className={`text-xs font-medium py-2 rounded-lg border transition ${
+                            filters.stops === s.key
+                              ? "border-[#ff8c42] bg-[#ff8c42]/10 text-[#ff7a2e]"
+                              : "border-slate-200 text-slate-500 hover:border-slate-300"
+                          }`}
+                        >
+                          {s.label}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
 
-                        <div className="grid lg:grid-cols-[1fr_auto] gap-0">
-                          {/* Flight info */}
-                          <div className="p-5 md:p-6">
-                            <div className="flex items-center gap-3 mb-5">
-                              <div className="flex -space-x-2 rtl:space-x-reverse shrink-0">
-                                {carriers.slice(0, 2).map((c) => (
-                                  <div
-                                    key={c}
-                                    className="w-11 h-11 rounded-xl bg-white border border-slate-100 flex items-center justify-center overflow-hidden shadow-sm"
+                  {/* Toggles */}
+                  <div className="space-y-2">
+                    {[
+                      { key: "baggageOnly" as const, label: "أمتعة مسجّلة مشمولة", icon: Luggage },
+                      { key: "refundableOnly" as const, label: "قابل للاسترجاع", icon: RefreshCw },
+                    ].map((t) => (
+                      <button
+                        key={t.key}
+                        onClick={() => setFilters((f) => ({ ...f, [t.key]: !f[t.key] }))}
+                        className="w-full flex items-center gap-2.5 text-sm text-slate-600"
+                      >
+                        <span
+                          className={`w-5 h-5 rounded-md border flex items-center justify-center transition ${
+                            filters[t.key] ? "bg-[#ff8c42] border-[#ff8c42]" : "border-slate-300"
+                          }`}
+                        >
+                          {filters[t.key] && <Check className="w-3.5 h-3.5 text-white" />}
+                        </span>
+                        <t.icon className="w-4 h-4 text-slate-400" />
+                        {t.label}
+                      </button>
+                    ))}
+                  </div>
+
+                  {/* Airlines */}
+                  <div className="space-y-2">
+                    <label className="text-sm font-semibold text-slate-700">شركات الطيران</label>
+                    <div className="space-y-1.5 max-h-56 overflow-y-auto pl-1">
+                      {allAirlines.map((code) => (
+                        <button
+                          key={code}
+                          onClick={() => toggleAirline(code)}
+                          className="w-full flex items-center gap-2.5 text-sm text-slate-600"
+                        >
+                          <span
+                            className={`w-5 h-5 rounded-md border flex items-center justify-center transition shrink-0 ${
+                              filters.airlines.includes(code) ? "bg-[#ff8c42] border-[#ff8c42]" : "border-slate-300"
+                            }`}
+                          >
+                            {filters.airlines.includes(code) && <Check className="w-3.5 h-3.5 text-white" />}
+                          </span>
+                          <span className="truncate text-right flex-1">{getAirlineName(code, language)}</span>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                </aside>
+
+                {/* Results list */}
+                <div className="space-y-4">
+                  {/* Sort tabs */}
+                  <div className="inline-flex gap-1 bg-slate-100 p-1 rounded-full">
+                    {sortTabs.map((t) => (
+                      <button
+                        key={t.key}
+                        onClick={() => setSortBy(t.key)}
+                        className={`flex items-center gap-1.5 px-4 py-2 text-sm font-semibold rounded-full transition-all ${
+                          sortBy === t.key ? "bg-white text-[#1e3a5f] shadow-sm" : "text-slate-500 hover:text-slate-700"
+                        }`}
+                      >
+                        <t.icon className="w-4 h-4" /> {t.label}
+                      </button>
+                    ))}
+                  </div>
+
+                  {sorted.length === 0 && (
+                    <div className="text-center py-16 bg-white rounded-2xl border border-slate-100">
+                      <p className="text-slate-500">لا توجد رحلات مطابقة للفلاتر.</p>
+                      <button onClick={resetFilters} className="text-[#ff8c42] text-sm mt-2 hover:underline">
+                        مسح الفلاتر
+                      </button>
+                    </div>
+                  )}
+
+                  {sorted.map(({ flight, index, price, dur, stops }: any) => {
+                    const prices = formatPrice(flight.price.total)
+                    const segments = flight.itineraries[0].segments
+                    const first = segments[0]
+                    const last = segments[segments.length - 1]
+                    const carriers = Array.from(new Set(segments.map((s: any) => s.carrierCode))) as string[]
+                    const logoFor = (code: string) =>
+                      segments.find((s: any) => s.carrierCode === code)?.logo || getAirlineLogo(code)
+                    const airlineNames = carriers.map((c) => getAirlineName(c, language)).join("، ")
+                    const stopCities = segments.slice(0, -1).map((s: any) => s.arrival.iataCode)
+                    const offset = dayOffset(first.departure.at, last.arrival.at)
+                    const isCheapest = price === minPrice
+                    const isFastest = dur === minDur
+
+                    return (
+                      <Card
+                        key={index}
+                        className="border border-slate-100 rounded-2xl shadow-card hover:shadow-card-hover transition-all overflow-hidden animate-rise"
+                      >
+                        <CardContent className="p-0">
+                          {(isCheapest || isFastest) && (
+                            <div className="flex gap-2 px-5 pt-4">
+                              {isCheapest && (
+                                <span className="inline-flex items-center gap-1 text-xs font-bold px-2.5 py-1 rounded-md bg-emerald-500 text-white">
+                                  <TrendingDown className="w-3 h-3" /> الأرخص
+                                </span>
+                              )}
+                              {isFastest && (
+                                <span className="inline-flex items-center gap-1 text-xs font-bold px-2.5 py-1 rounded-md bg-[#1e3a5f] text-white">
+                                  <Zap className="w-3 h-3" /> الأسرع
+                                </span>
+                              )}
+                            </div>
+                          )}
+
+                          <div className="grid lg:grid-cols-[1fr_auto] gap-0">
+                            <div className="p-5 md:p-6">
+                              <div className="flex items-center gap-3 mb-5">
+                                <div className="flex -space-x-2 rtl:space-x-reverse shrink-0">
+                                  {carriers.slice(0, 2).map((c) => (
+                                    <div
+                                      key={c}
+                                      className="w-11 h-11 rounded-xl bg-white border border-slate-100 flex items-center justify-center overflow-hidden shadow-sm"
+                                    >
+                                      <img
+                                        src={logoFor(c) || "/placeholder.svg"}
+                                        alt={getAirlineName(c, language)}
+                                        className="w-8 h-8 object-contain"
+                                        onError={(e) => ((e.target as HTMLImageElement).src = "/abstract-airline-logo.png")}
+                                      />
+                                    </div>
+                                  ))}
+                                </div>
+                                <div className="min-w-0">
+                                  <p className="font-bold text-slate-800 leading-tight truncate">{airlineNames}</p>
+                                  <p className="text-xs text-slate-400">
+                                    {first.flightNumber ? `رحلة ${first.flightNumber}` : `رحلة ${carriers.join("/")}`} · {flight.cabinClass}
+                                  </p>
+                                </div>
+                              </div>
+
+                              <div className="flex items-center gap-4">
+                                <div className="text-center min-w-[68px]">
+                                  <p className="text-2xl font-extrabold text-[#1e3a5f] tracking-tight">{fmtTime(first.departure.at)}</p>
+                                  <p className="text-sm font-semibold text-slate-600 mt-0.5">{first.departure.iataCode}</p>
+                                </div>
+                                <div className="flex-1 flex flex-col items-center gap-1.5 px-2">
+                                  <span className="text-xs font-medium text-slate-400 flex items-center gap-1">
+                                    <Clock className="w-3 h-3" /> {formatDuration(flight.itineraries[0].duration)}
+                                  </span>
+                                  <div className="w-full flight-path" />
+                                  <span
+                                    className={`text-xs font-semibold px-2 py-0.5 rounded-full ${
+                                      stops === 0 ? "bg-emerald-50 text-emerald-600" : "badge-soft"
+                                    }`}
                                   >
-                                    <img
-                                      src={getAirlineLogo(c) || "/placeholder.svg"}
-                                      alt={getAirlineName(c, language)}
-                                      className="w-8 h-8 object-contain"
-                                      onError={(e) => ((e.target as HTMLImageElement).src = "/abstract-airline-logo.png")}
-                                    />
-                                  </div>
-                                ))}
+                                    {stops === 0 ? "مباشر" : `${stops} توقف في ${stopCities.join("، ")}`}
+                                  </span>
+                                </div>
+                                <div className="text-center min-w-[68px]">
+                                  <p className="text-2xl font-extrabold text-[#1e3a5f] tracking-tight relative inline-block">
+                                    {fmtTime(last.arrival.at)}
+                                    {offset > 0 && (
+                                      <sup className="text-[10px] font-bold text-[#ff8c42] absolute -top-1 -left-4">+{offset}</sup>
+                                    )}
+                                  </p>
+                                  <p className="text-sm font-semibold text-slate-600 mt-0.5">{last.arrival.iataCode}</p>
+                                </div>
                               </div>
-                              <div className="min-w-0">
-                                <p className="font-bold text-slate-800 leading-tight truncate">{airlineNames}</p>
-                                <p className="text-xs text-slate-400">
-                                  رحلة {carriers.join("/")} · اقتصادي
-                                </p>
+
+                              {/* extras row */}
+                              <div className="flex flex-wrap items-center gap-x-4 gap-y-2 mt-4 pt-4 border-t border-slate-100 text-xs text-slate-500">
+                                <span className="flex items-center gap-1.5">
+                                  <Luggage className="w-3.5 h-3.5 text-[#ff8c42]" />
+                                  {flight.baggage?.checked > 0 ? `${flight.baggage.checked} حقيبة مسجّلة` : "بدون حقيبة مسجّلة"}
+                                </span>
+                                <span className="flex items-center gap-1.5">
+                                  <Briefcase className="w-3.5 h-3.5 text-[#ff8c42]" /> حقيبة يد
+                                </span>
+                                <span className={`flex items-center gap-1.5 ${flight.refundable ? "text-emerald-600" : "text-slate-400"}`}>
+                                  <RefreshCw className="w-3.5 h-3.5" /> {flight.refundable ? "قابل للاسترجاع" : "غير قابل للاسترجاع"}
+                                </span>
+                                {flight.emissionsKg && (
+                                  <span className="flex items-center gap-1.5">
+                                    <Leaf className="w-3.5 h-3.5 text-emerald-500" /> {flight.emissionsKg} كجم CO₂
+                                  </span>
+                                )}
                               </div>
                             </div>
 
-                            {/* Route */}
-                            <div className="flex items-center gap-4">
-                              <div className="text-center min-w-[68px]">
-                                <p className="text-2xl font-extrabold text-[#1e3a5f] tracking-tight">{fmtTime(first.departure.at)}</p>
-                                <p className="text-sm font-semibold text-slate-600 mt-0.5">{first.departure.iataCode}</p>
-                              </div>
-
-                              <div className="flex-1 flex flex-col items-center gap-1.5 px-2">
-                                <span className="text-xs font-medium text-slate-400 flex items-center gap-1">
-                                  <Clock className="w-3 h-3" /> {formatDuration(flight.itineraries[0].duration)}
-                                </span>
-                                <div className="w-full flight-path" />
-                                <span
-                                  className={`text-xs font-semibold px-2 py-0.5 rounded-full ${
-                                    stops === 0 ? "bg-emerald-50 text-emerald-600" : "badge-soft"
-                                  }`}
-                                >
-                                  {stops === 0 ? "مباشر" : `${stops} توقف في ${stopCities.join("، ")}`}
-                                </span>
-                              </div>
-
-                              <div className="text-center min-w-[68px]">
-                                <p className="text-2xl font-extrabold text-[#1e3a5f] tracking-tight relative inline-block">
-                                  {fmtTime(last.arrival.at)}
-                                  {offset > 0 && (
-                                    <sup className="text-[10px] font-bold text-[#ff8c42] absolute -top-1 -left-4">+{offset}</sup>
-                                  )}
+                            {/* Price + CTA */}
+                            <div className="bg-slate-50/70 border-t lg:border-t-0 lg:border-r border-slate-100 p-5 md:p-6 flex flex-col justify-center lg:min-w-[240px]">
+                              <div className="text-center lg:text-right mb-3">
+                                <p className="text-sm text-slate-400 line-through">${prices.usd}</p>
+                                <p className="text-3xl font-extrabold text-[#ff8c42] leading-none">
+                                  {prices.sdg} <span className="text-lg font-bold">ج.س</span>
                                 </p>
-                                <p className="text-sm font-semibold text-slate-600 mt-0.5">{last.arrival.iataCode}</p>
+                                <p className="text-xs text-slate-400 mt-1">للشخص الواحد · شامل الضرائب</p>
                               </div>
-                            </div>
-
-                            {/* extras row */}
-                            <div className="flex items-center gap-4 mt-4 pt-4 border-t border-slate-100 text-xs text-slate-500">
-                              <span className="flex items-center gap-1.5">
-                                <Briefcase className="w-3.5 h-3.5 text-[#ff8c42]" /> حقيبة يد مشمولة
-                              </span>
-                              <span className="flex items-center gap-1.5">
-                                <Plane className="w-3.5 h-3.5 text-[#ff8c42]" /> {carriers.length > 1 ? "رحلة بشركات متعددة" : "رحلة مباشرة بالشركة"}
-                              </span>
+                              <Button
+                                className="w-full bg-[#25D366] hover:bg-[#20BA5A] text-white flex items-center justify-center gap-2 rounded-xl h-11 font-bold shadow-md shadow-green-500/20"
+                                onClick={() =>
+                                  bookViaWhatsApp({
+                                    origin: first.departure.iataCode,
+                                    destination: last.arrival.iataCode,
+                                    date: new Date(first.departure.at).toLocaleDateString(language === "ar" ? "ar-SA" : "en-US"),
+                                    price: prices.sdg,
+                                  })
+                                }
+                              >
+                                <MessageCircle className="w-5 h-5" /> احجز عبر واتساب
+                              </Button>
+                              <button
+                                onClick={() => setSelectedFlight(flight)}
+                                className="w-full mt-2 text-sm font-semibold text-[#1e3a5f] hover:text-[#ff8c42] flex items-center justify-center gap-1.5 transition"
+                              >
+                                <Info className="w-4 h-4" /> تفاصيل الرحلة
+                              </button>
                             </div>
                           </div>
-
-                          {/* Price + CTA */}
-                          <div className="bg-slate-50/70 border-t lg:border-t-0 lg:border-r border-slate-100 p-5 md:p-6 flex flex-col justify-center lg:min-w-[240px]">
-                            <div className="text-center lg:text-right mb-3">
-                              <p className="text-sm text-slate-400 line-through">${prices.usd}</p>
-                              <p className="text-3xl font-extrabold text-[#ff8c42] leading-none">
-                                {prices.sdg} <span className="text-lg font-bold">ج.س</span>
-                              </p>
-                              <p className="text-xs text-slate-400 mt-1">للشخص الواحد · شامل الضرائب</p>
-                            </div>
-                            <Button
-                              className="w-full bg-[#25D366] hover:bg-[#20BA5A] text-white flex items-center justify-center gap-2 rounded-xl h-11 font-bold shadow-md shadow-green-500/20"
-                              onClick={() =>
-                                bookViaWhatsApp({
-                                  origin: first.departure.iataCode,
-                                  destination: last.arrival.iataCode,
-                                  date: new Date(first.departure.at).toLocaleDateString(language === "ar" ? "ar-SA" : "en-US"),
-                                  price: prices.sdg,
-                                })
-                              }
-                            >
-                              <MessageCircle className="w-5 h-5" /> احجز عبر واتساب
-                            </Button>
-                          </div>
-                        </div>
-                      </CardContent>
-                    </Card>
-                  )
-                })}
+                        </CardContent>
+                      </Card>
+                    )
+                  })}
+                </div>
               </div>
             )
           })()}
@@ -674,6 +850,146 @@ export default function Home() {
           )}
         </section>
       )}
+
+      {/* ─── Flight details modal ─── */}
+      {selectedFlight && (() => {
+        const flight = selectedFlight
+        const segments = flight.itineraries[0].segments
+        const first = segments[0]
+        const last = segments[segments.length - 1]
+        const prices = formatPrice(flight.price.total)
+        const fmtTime = (t: string) =>
+          new Date(t).toLocaleTimeString(language === "ar" ? "ar-SA" : "en-US", { hour: "2-digit", minute: "2-digit" })
+        const fmtDate = (t: string) =>
+          new Date(t).toLocaleDateString(language === "ar" ? "ar-SA" : "en-US", { weekday: "short", day: "numeric", month: "short" })
+
+        return (
+          <div
+            className="fixed inset-0 z-[100] flex items-end md:items-center justify-center bg-black/50 backdrop-blur-sm p-0 md:p-4 animate-rise"
+            onClick={() => setSelectedFlight(null)}
+          >
+            <div
+              className="bg-white w-full md:max-w-2xl md:rounded-3xl rounded-t-3xl max-h-[90vh] overflow-y-auto shadow-float"
+              onClick={(e) => e.stopPropagation()}
+              dir={language === "ar" ? "rtl" : "ltr"}
+            >
+              {/* header */}
+              <div className="sticky top-0 bg-brand-gradient text-white p-5 flex items-center justify-between z-10">
+                <div>
+                  <h3 className="text-lg font-bold">تفاصيل الرحلة</h3>
+                  <p className="text-sm text-white/70">
+                    {first.departure.iataCode} → {last.arrival.iataCode} · {formatDuration(flight.itineraries[0].duration)}
+                  </p>
+                </div>
+                <button onClick={() => setSelectedFlight(null)} className="w-9 h-9 rounded-full bg-white/10 hover:bg-white/20 flex items-center justify-center transition">
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+
+              <div className="p-5 space-y-4">
+                {/* segments */}
+                {segments.map((seg: any, i: number) => {
+                  const nextSeg = segments[i + 1]
+                  const layover = nextSeg
+                    ? durationToMinutes(
+                        `PT${Math.floor((new Date(nextSeg.departure.at).getTime() - new Date(seg.arrival.at).getTime()) / 60000 / 60)}H${Math.round(((new Date(nextSeg.departure.at).getTime() - new Date(seg.arrival.at).getTime()) / 60000) % 60)}M`,
+                      )
+                    : 0
+                  const layoverStr = nextSeg
+                    ? formatDuration(
+                        `PT${Math.floor((new Date(nextSeg.departure.at).getTime() - new Date(seg.arrival.at).getTime()) / 60000 / 60)}H${Math.round(((new Date(nextSeg.departure.at).getTime() - new Date(seg.arrival.at).getTime()) / 60000) % 60)}M`,
+                      )
+                    : ""
+                  return (
+                    <div key={i}>
+                      <div className="flex items-center gap-3 mb-3">
+                        <div className="w-10 h-10 rounded-lg bg-slate-50 border border-slate-100 flex items-center justify-center overflow-hidden">
+                          <img
+                            src={seg.logo || getAirlineLogo(seg.carrierCode)}
+                            alt={seg.carrierName}
+                            className="w-7 h-7 object-contain"
+                            onError={(e) => ((e.target as HTMLImageElement).src = "/abstract-airline-logo.png")}
+                          />
+                        </div>
+                        <div>
+                          <p className="font-bold text-slate-800 text-sm">{getAirlineName(seg.carrierCode, language)}</p>
+                          <p className="text-xs text-slate-400">
+                            {seg.flightNumber || seg.carrierCode}{seg.aircraft ? ` · ${seg.aircraft}` : ""}{seg.cabin ? ` · ${seg.cabin}` : ""}
+                          </p>
+                        </div>
+                      </div>
+                      <div className="flex gap-4 pr-2 border-r-2 border-dashed border-slate-200">
+                        <div className="flex-1 pb-4 relative">
+                          <span className="absolute -right-[9px] top-1 w-3.5 h-3.5 rounded-full bg-[#1e3a5f]" />
+                          <p className="text-sm font-bold text-slate-800 pr-4">
+                            {fmtTime(seg.departure.at)} · {seg.departure.iataCode}
+                          </p>
+                          <p className="text-xs text-slate-400 pr-4">{fmtDate(seg.departure.at)}</p>
+                        </div>
+                      </div>
+                      <div className="flex gap-4 pr-2 border-r-2 border-dashed border-slate-200">
+                        <div className="flex-1 pb-2 relative">
+                          <span className="absolute -right-[9px] top-1 w-3.5 h-3.5 rounded-full bg-[#ff8c42]" />
+                          <p className="text-sm font-bold text-slate-800 pr-4">
+                            {fmtTime(seg.arrival.at)} · {seg.arrival.iataCode}
+                          </p>
+                          <p className="text-xs text-slate-400 pr-4">{fmtDate(seg.arrival.at)}</p>
+                        </div>
+                      </div>
+                      {nextSeg && (
+                        <div className="my-3 text-center text-xs font-medium text-amber-600 bg-amber-50 rounded-lg py-2">
+                          توقّف في {seg.arrival.iataCode} · {layoverStr}
+                        </div>
+                      )}
+                    </div>
+                  )
+                })}
+
+                {/* fare details */}
+                <div className="grid grid-cols-2 gap-3 pt-4 border-t border-slate-100">
+                  {[
+                    { icon: Luggage, label: "الأمتعة المسجّلة", value: flight.baggage?.checked > 0 ? `${flight.baggage.checked} حقيبة` : "غير مشمولة" },
+                    { icon: Briefcase, label: "حقيبة اليد", value: flight.baggage?.carryOn > 0 ? `${flight.baggage.carryOn} حقيبة` : "غير مشمولة" },
+                    { icon: RefreshCw, label: "الاسترجاع", value: flight.refundable ? "مسموح" : "غير مسموح" },
+                    { icon: RotateCcw, label: "تعديل الحجز", value: flight.changeable ? "مسموح" : "غير مسموح" },
+                    { icon: Plane, label: "درجة المقصورة", value: flight.cabinClass },
+                    ...(flight.emissionsKg ? [{ icon: Leaf, label: "انبعاثات الكربون", value: `${flight.emissionsKg} كجم` }] : []),
+                  ].map((d, i) => (
+                    <div key={i} className="flex items-center gap-2.5 bg-slate-50 rounded-xl p-3">
+                      <d.icon className="w-4 h-4 text-[#ff8c42] shrink-0" />
+                      <div className="min-w-0">
+                        <p className="text-[11px] text-slate-400 leading-tight">{d.label}</p>
+                        <p className="text-sm font-semibold text-slate-700 truncate">{d.value}</p>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* footer */}
+              <div className="sticky bottom-0 bg-white border-t border-slate-100 p-4 flex items-center justify-between gap-4">
+                <div>
+                  <p className="text-xs text-slate-400">السعر الإجمالي</p>
+                  <p className="text-2xl font-extrabold text-[#ff8c42] leading-none">{prices.sdg} <span className="text-sm">ج.س</span></p>
+                </div>
+                <Button
+                  className="bg-[#25D366] hover:bg-[#20BA5A] text-white flex items-center gap-2 rounded-xl h-11 px-6 font-bold"
+                  onClick={() =>
+                    bookViaWhatsApp({
+                      origin: first.departure.iataCode,
+                      destination: last.arrival.iataCode,
+                      date: new Date(first.departure.at).toLocaleDateString(language === "ar" ? "ar-SA" : "en-US"),
+                      price: prices.sdg,
+                    })
+                  }
+                >
+                  <MessageCircle className="w-5 h-5" /> احجز عبر واتساب
+                </Button>
+              </div>
+            </div>
+          </div>
+        )
+      })()}
 
       {/* ─── Popular destinations ─── */}
       <section id="hotels" className="container mx-auto px-4 py-16">
