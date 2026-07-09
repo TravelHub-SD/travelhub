@@ -15,12 +15,12 @@ import {
   MessageCircle,
   Globe,
   Clock,
-  ArrowLeftRight,
   ShieldCheck,
   Headphones,
   BadgeCheck,
   Star,
   ChevronLeft,
+  ChevronDown,
   Briefcase,
   Zap,
   TrendingDown,
@@ -32,6 +32,14 @@ import {
   RefreshCw,
   RotateCcw,
   Info,
+  Percent,
+  Car,
+  ArrowUp,
+  Send,
+  Facebook,
+  Instagram,
+  Twitter,
+  Linkedin,
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
@@ -43,12 +51,15 @@ import { getAirlineName, getAirlineLogo } from "@/lib/airlines"
 const EXCHANGE_RATE = 3650 // سعر الدولار مقابل الجنيه السوداني
 const PHONE_NUMBER = "249114610204"
 const WHATSAPP_NUMBER = "249960278594"
+const EMAIL = "info@travelhub.com"
 
 const formatPrice = (usdPrice: string) => {
   const price = Number.parseFloat(usdPrice)
   const sdgPrice = Math.round(price * EXCHANGE_RATE)
   return { usd: price.toFixed(2), sdg: sdgPrice.toLocaleString("ar-SA") }
 }
+
+const sdg = (n: number) => n.toLocaleString("ar-SA")
 
 // PT7H15M -> "7 س 15 د"
 const formatDuration = (iso?: string) => {
@@ -79,6 +90,46 @@ const bookViaWhatsApp = (flightDetails: any) => {
   window.open(`https://wa.me/${WHATSAPP_NUMBER}?text=${encodeURIComponent(message)}`, "_blank")
 }
 
+const bookOfferViaWhatsApp = (city: string, price: string) => {
+  const message = `مرحباً، مهتم بعرض ${city} بسعر ${price} جنيه. أريد التفاصيل من فضلكم.`
+  window.open(`https://wa.me/${WHATSAPP_NUMBER}?text=${encodeURIComponent(message)}`, "_blank")
+}
+
+const scrollToTop = () => window.scrollTo({ top: 0, behavior: "smooth" })
+
+// صورة تُخفي نفسها عند الفشل لتظهر الخلفية المتدرّجة (بنية جاهزة للصور)
+function SmartImg({ src, alt, className }: { src: string; alt: string; className?: string }) {
+  const [err, setErr] = useState(false)
+  if (err) return null
+  return <img src={src || "/placeholder.svg"} alt={alt} className={className} onError={() => setErr(true)} />
+}
+
+// شعار TravelHub: يعرض ملف اللوجو، ويسقط لشعار نصّي إن لم يُرفع الملف بعد
+function Logo({ dark = false }: { dark?: boolean }) {
+  const [err, setErr] = useState(false)
+  if (err) {
+    return (
+      <div className="flex items-center gap-2.5">
+        <div className="w-9 h-9 rounded-xl bg-[#ff8c42] flex items-center justify-center shadow-lg shadow-orange-500/20">
+          <Plane className="w-5 h-5 text-white -rotate-45" />
+        </div>
+        <span className="text-xl font-extrabold tracking-tight">
+          <span className={dark ? "text-white" : "text-[#1e3a5f]"}>Travel</span>
+          <span className="text-[#ff8c42]">Hub</span>
+        </span>
+      </div>
+    )
+  }
+  return (
+    <img
+      src="/travelhub-logo.png"
+      alt="TravelHub"
+      className="h-11 w-auto object-contain"
+      onError={() => setErr(true)}
+    />
+  )
+}
+
 export default function Home() {
   const [activeTab, setActiveTab] = useState<"flights" | "hotels" | "activities">("flights")
   const [tripType, setTripType] = useState<"one-way" | "round-trip" | "multi-city">("round-trip")
@@ -87,6 +138,7 @@ export default function Home() {
   const [searchResults, setSearchResults] = useState<any>(null)
   const [sortBy, setSortBy] = useState<"cheapest" | "fastest" | "nonstop">("cheapest")
   const [selectedFlight, setSelectedFlight] = useState<any>(null)
+  const [email, setEmail] = useState("")
   const [filters, setFilters] = useState<{
     airlines: string[]
     stops: "all" | "0" | "1" | "2"
@@ -99,7 +151,7 @@ export default function Home() {
   const resetFilters = () =>
     setFilters({ airlines: [], stops: "all", maxPrice: null, baggageOnly: false, refundableOnly: false })
 
-  const [flightForm, setFlightForm] = useState({ origin: "", destination: "", departureDate: "", adults: "1" })
+  const [flightForm, setFlightForm] = useState({ origin: "", destination: "", departureDate: "", returnDate: "", adults: "1" })
   const [hotelForm, setHotelForm] = useState({ city: "", checkIn: "", checkOut: "", adults: "1" })
 
   const handleFlightSearch = async (e: React.FormEvent) => {
@@ -154,23 +206,64 @@ export default function Home() {
     }
   }
 
-  const topHotels = [
-    { city: "القاهرة", hotel: "Ramses Hilton", image: "/cairo-hotel.jpg", price: "من 85$" },
-    { city: "دبي", hotel: "Atlantis The Royal", image: "/dubai-hotel.jpg", price: "من 240$" },
-    { city: "إسطنبول", hotel: "DoubleTree by Hilton", image: "/istanbul-hotel.jpg", price: "من 70$" },
-    { city: "لندن", hotel: "Royal Lancaster London", image: "/london-hotel.jpg", price: "من 180$" },
+  const handleSubscribe = (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!email) return
+    alert("شكراً لاشتراكك في نشرتنا البريدية! ستصلك أفضل العروض قريباً.")
+    setEmail("")
+  }
+
+  const destinations = [
+    { city: "لندن", country: "المملكة المتحدة", image: "/london-hotel.jpg", price: "من 180$" },
+    { city: "دبي", country: "الإمارات العربية المتحدة", image: "/dubai-hotel.jpg", price: "من 240$" },
+    { city: "إسطنبول", country: "تركيا", image: "/istanbul-hotel.jpg", price: "من 70$" },
+    { city: "القاهرة", country: "مصر", image: "/cairo-hotel.jpg", price: "من 85$" },
+  ]
+
+  const offers = [
+    {
+      city: "باريس",
+      country: "فرنسا",
+      nights: "4 أيام · 3 ليالٍ",
+      discount: 20,
+      oldPrice: 16249,
+      newPrice: 12999,
+      image: "/offer-paris.jpg",
+      grad: "from-[#7c3aed] to-[#db2777]",
+    },
+    {
+      city: "المالديف",
+      country: "جزر المالديف",
+      nights: "5 أيام · 4 ليالٍ",
+      discount: 15,
+      oldPrice: 22249,
+      newPrice: 18999,
+      image: "/offer-maldives.jpg",
+      grad: "from-[#0891b2] to-[#0d9488]",
+    },
+    {
+      city: "كوالالمبور",
+      country: "ماليزيا",
+      nights: "4 أيام · 3 ليالٍ",
+      discount: 10,
+      oldPrice: 11199,
+      newPrice: 9999,
+      image: "/offer-kualalumpur.jpg",
+      grad: "from-[#1e3a5f] to-[#2563eb]",
+    },
   ]
 
   const tripTypes: { key: typeof tripType; label: string }[] = [
-    { key: "round-trip", label: "ذهاب وعودة" },
     { key: "one-way", label: "ذهاب فقط" },
+    { key: "round-trip", label: "ذهاب وعودة" },
     { key: "multi-city", label: "متعدد المدن" },
   ]
 
   const services = [
-    { icon: Plane, title: "حجز طيران", desc: "رحلات دولية ومحلية بأفضل الأسعار مع أكثر من 450 شركة طيران عالمية." },
-    { icon: Hotel, title: "فنادق ومنتجعات", desc: "تأكيد فوري لحجوزات الفنادق في أكثر من 180 دولة حول العالم." },
-    { icon: FileText, title: "استخراج التأشيرات", desc: "نسهّل عليك إجراءات التأشيرات السياحية وتأشيرات الزيارة لكل الوجهات." },
+    { icon: Plane, title: "حجز طيران", desc: "نقدم أفضل أسعار تذاكر الطيران لجميع الوجهات حول العالم." },
+    { icon: Hotel, title: "فنادق ومنتجعات", desc: "أكثر من 1.5 مليون فندق حول العالم بتأكيد فوري." },
+    { icon: ShieldCheck, title: "ضمان أفضل الأسعار", desc: "نضمن لك الحصول على أفضل الأسعار المتاحة في السوق." },
+    { icon: Headphones, title: "دعم العملاء 24/7", desc: "فريق دعم متاح على مدار الساعة لمساعدتك في أي وقت." },
   ]
 
   const trust = [
@@ -179,41 +272,50 @@ export default function Home() {
     { icon: Headphones, title: "دعم 24/7", desc: "على مدار الأسبوع" },
   ]
 
+  const navLinks = [
+    { href: "#home", label: "الرئيسية" },
+    { href: "#destinations", label: "الوجهات" },
+    { href: "#hotels", label: "الفنادق" },
+    { href: "#offers", label: "العروض" },
+    { href: "#services", label: "خدماتنا" },
+    { href: "#about", label: "من نحن" },
+    { href: "#contact", label: "تواصل معنا" },
+  ]
+
   return (
     <div className="min-h-screen bg-slate-50 text-slate-800" dir={language === "ar" ? "rtl" : "ltr"}>
       {/* ─── Header ─── */}
-      <header className="sticky top-0 z-50 bg-[#12294a]/95 backdrop-blur-md border-b border-white/10">
-        <div className="container mx-auto px-4 h-16 flex justify-between items-center">
-          <div className="flex items-center gap-2.5">
-            <div className="w-9 h-9 rounded-xl bg-[#ff8c42] flex items-center justify-center shadow-lg shadow-orange-500/20">
-              <Plane className="w-5 h-5 text-white -rotate-45" />
-            </div>
-            <h1 className="text-xl font-bold tracking-tight">
-              <span className="text-white">Travel</span>
-              <span className="text-[#ff8c42]">Hub</span>
-            </h1>
-          </div>
-          <nav className="hidden md:flex items-center gap-8 text-sm text-white/80">
-            <a href="#flights" className="hover:text-[#ff8c42] transition">الرحلات</a>
-            <a href="#hotels" className="hover:text-[#ff8c42] transition">الفنادق</a>
-            <a href="#services" className="hover:text-[#ff8c42] transition">خدماتنا</a>
-            <a href="#contact" className="hover:text-[#ff8c42] transition">تواصل معنا</a>
+      <header className="sticky top-0 z-50 bg-white/95 backdrop-blur-md border-b border-slate-100 shadow-sm">
+        <div className="container mx-auto px-4 h-[68px] flex justify-between items-center gap-4">
+          <a href="#home" className="shrink-0">
+            <Logo />
+          </a>
+          <nav className="hidden lg:flex items-center gap-7 text-sm font-medium text-slate-600">
+            {navLinks.map((l) => (
+              <a key={l.href} href={l.href} className="hover:text-[#ff8c42] transition relative">
+                {l.label}
+              </a>
+            ))}
           </nav>
           <Button
             size="sm"
             variant="outline"
             onClick={() => setLanguage(language === "ar" ? "en" : "ar")}
-            className="bg-white/5 text-white border-white/20 hover:bg-[#ff8c42] hover:border-[#ff8c42] transition-all rounded-full"
+            className="shrink-0 border-slate-200 text-slate-600 hover:bg-[#ff8c42] hover:text-white hover:border-[#ff8c42] transition-all rounded-full"
           >
             <Globe className="w-4 h-4 ml-1" />
-            {language === "ar" ? "English" : "العربية"}
+            {language === "ar" ? "العربية" : "English"}
+            <ChevronDown className="w-3.5 h-3.5 mr-1 opacity-60" />
           </Button>
         </div>
       </header>
 
       {/* ─── Hero + Booking ─── */}
-      <section className="relative bg-hero-gradient text-white pt-16 pb-28 overflow-hidden">
-        <div className="absolute inset-0 opacity-[0.07] bg-[url('/airplane-flying-in-blue-sky.jpg')] bg-cover bg-center" />
+      <section id="home" className="relative text-white pt-16 pb-32 overflow-hidden">
+        {/* photographic background */}
+        <div className="absolute inset-0 bg-[url('/airplane-flying-in-blue-sky.jpg')] bg-cover bg-center" />
+        <div className="absolute inset-0 bg-brand-gradient opacity-90" />
+        <div className="absolute inset-0 bg-gradient-to-t from-slate-50 via-transparent to-transparent" />
         <div className="container mx-auto px-4 relative z-10">
           <div className="max-w-3xl mx-auto text-center space-y-5 animate-rise">
             <span className="inline-flex items-center gap-2 text-xs font-medium px-4 py-1.5 rounded-full glass text-white/90">
@@ -221,10 +323,12 @@ export default function Home() {
               وجهتك الموثوقة للسفر من السودان إلى العالم
             </span>
             <h2 className="text-4xl md:text-6xl font-extrabold leading-tight text-balance">
-              احجز رحلتك القادمة <span className="text-[#ff8c42]">بثقة</span>
+              اكتشف العالم، حجوزات أسهل
+              <br />
+              <span className="text-[#ff8c42]">رحلات أكثر متعة</span>
             </h2>
-            <p className="text-base md:text-lg text-white/75 text-balance max-w-xl mx-auto">
-              قارن أسعار أكثر من 450 شركة طيران و1.5 مليون فندق، واحجز مباشرة عبر واتساب في دقائق.
+            <p className="text-base md:text-lg text-white/80 text-balance max-w-xl mx-auto">
+              احجز من بين أكثر من 1.5 مليون فندق و450+ شركة طيران حول العالم، وادفع مباشرة عبر واتساب.
             </p>
           </div>
 
@@ -234,14 +338,14 @@ export default function Home() {
               <Tabs value={activeTab} onValueChange={setActiveTab as any} className="w-full">
                 <TabsList className="grid w-full max-w-md mx-auto grid-cols-3 mb-6 bg-slate-100 rounded-2xl p-1 h-12">
                   {[
-                    { v: "flights", icon: Plane, label: "طيران" },
+                    { v: "flights", icon: Plane, label: "رحلات طيران" },
                     { v: "hotels", icon: Hotel, label: "فنادق" },
                     { v: "activities", icon: MapPin, label: "أنشطة" },
                   ].map(({ v, icon: Icon, label }) => (
                     <TabsTrigger
                       key={v}
                       value={v}
-                      className="rounded-xl data-[state=active]:bg-[#ff8c42] data-[state=active]:text-white data-[state=active]:shadow-md font-semibold transition-all"
+                      className="rounded-xl data-[state=active]:bg-[#ff8c42] data-[state=active]:text-white data-[state=active]:shadow-md font-semibold transition-all text-xs md:text-sm"
                     >
                       <Icon className="w-4 h-4 ml-1.5" />
                       {label}
@@ -267,17 +371,17 @@ export default function Home() {
                       ))}
                     </div>
 
-                    <div className="grid md:grid-cols-3 gap-4">
+                    <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-4">
                       <AirportSelect
                         value={flightForm.origin}
                         onChange={(code) => setFlightForm({ ...flightForm, origin: code })}
-                        placeholder="مثال: الخرطوم، الرياض"
+                        placeholder="ابحث عن مدينة أو مطار"
                         label="من (المغادرة)"
                       />
                       <AirportSelect
                         value={flightForm.destination}
                         onChange={(code) => setFlightForm({ ...flightForm, destination: code })}
-                        placeholder="مثال: دبي، القاهرة"
+                        placeholder="ابحث عن مدينة أو مطار"
                         label="إلى (الوجهة)"
                       />
                       <div className="space-y-2">
@@ -291,6 +395,19 @@ export default function Home() {
                           value={flightForm.departureDate}
                           onChange={(e) => setFlightForm({ ...flightForm, departureDate: e.target.value })}
                           required
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <label className="text-sm font-medium text-slate-700 flex items-center gap-2">
+                          <Calendar className="w-4 h-4 text-[#ff8c42]" />
+                          تاريخ العودة
+                        </label>
+                        <Input
+                          type="date"
+                          className="h-12 rounded-xl border-slate-200 disabled:opacity-50"
+                          value={flightForm.returnDate}
+                          onChange={(e) => setFlightForm({ ...flightForm, returnDate: e.target.value })}
+                          disabled={tripType === "one-way"}
                         />
                       </div>
                     </div>
@@ -315,7 +432,7 @@ export default function Home() {
                           className="w-full bg-[#ff8c42] hover:bg-[#ff7a2e] text-white h-12 rounded-xl text-base font-bold shadow-lg shadow-orange-500/25"
                           disabled={isLoading}
                         >
-                          {isLoading ? "جاري البحث..." : (<><Search className="ml-2 w-5 h-5" /> بحث عن رحلات</>)}
+                          {isLoading ? "جاري البحث..." : (<><Search className="ml-2 w-5 h-5" /> ابحث عن رحلات</>)}
                         </Button>
                       </div>
                     </div>
@@ -368,7 +485,7 @@ export default function Home() {
                       className="w-full bg-[#ff8c42] hover:bg-[#ff7a2e] text-white h-12 rounded-xl mt-4 text-base font-bold shadow-lg shadow-orange-500/25"
                       disabled={isLoading}
                     >
-                      {isLoading ? "جاري البحث..." : (<><Search className="ml-2 w-5 h-5" /> بحث عن فنادق</>)}
+                      {isLoading ? "جاري البحث..." : (<><Search className="ml-2 w-5 h-5" /> ابحث عن فنادق</>)}
                     </Button>
                   </form>
                 </TabsContent>
@@ -890,11 +1007,6 @@ export default function Home() {
                 {/* segments */}
                 {segments.map((seg: any, i: number) => {
                   const nextSeg = segments[i + 1]
-                  const layover = nextSeg
-                    ? durationToMinutes(
-                        `PT${Math.floor((new Date(nextSeg.departure.at).getTime() - new Date(seg.arrival.at).getTime()) / 60000 / 60)}H${Math.round(((new Date(nextSeg.departure.at).getTime() - new Date(seg.arrival.at).getTime()) / 60000) % 60)}M`,
-                      )
-                    : 0
                   const layoverStr = nextSeg
                     ? formatDuration(
                         `PT${Math.floor((new Date(nextSeg.departure.at).getTime() - new Date(seg.arrival.at).getTime()) / 60000 / 60)}H${Math.round(((new Date(nextSeg.departure.at).getTime() - new Date(seg.arrival.at).getTime()) / 60000) % 60)}M`,
@@ -992,31 +1104,44 @@ export default function Home() {
       })()}
 
       {/* ─── Popular destinations ─── */}
-      <section id="hotels" className="container mx-auto px-4 py-16">
+      <section id="destinations" className="container mx-auto px-4 py-16">
         <div className="text-center mb-10">
-          <h3 className="text-3xl font-bold text-[#1e3a5f]">وجهات ننصح بها</h3>
-          <p className="text-slate-500 mt-2">أفضل الفنادق في أشهر المدن حول العالم</p>
+          <div className="inline-flex items-center gap-2 text-[#ff8c42] font-semibold text-sm mb-2">
+            <Plane className="w-4 h-4 -rotate-45" /> استكشف أجمل الوجهات حول العالم
+          </div>
+          <h3 className="text-3xl font-bold text-[#1e3a5f]">وجهات مميزة</h3>
         </div>
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-5">
-          {topHotels.map((hotel, index) => (
-            <Card key={index} className="border-0 rounded-2xl shadow-card hover:shadow-card-hover transition overflow-hidden group cursor-pointer">
-              <div className="relative h-52 overflow-hidden">
+          {destinations.map((d, index) => (
+            <Card key={index} className="border-0 rounded-2xl shadow-card hover:shadow-card-hover transition overflow-hidden group">
+              <div className="relative h-56 overflow-hidden">
                 <img
-                  src={hotel.image || "/placeholder.svg"}
-                  alt={hotel.hotel}
+                  src={d.image || "/placeholder.svg"}
+                  alt={d.city}
                   className="w-full h-full object-cover group-hover:scale-110 transition duration-500"
                 />
-                <div className="absolute inset-0 bg-gradient-to-t from-black/75 via-black/10 to-transparent" />
-                <div className="absolute bottom-3 right-3 left-3 text-white">
-                  <h4 className="text-xl font-bold">{hotel.city}</h4>
-                  <p className="text-sm text-white/80 line-clamp-1">{hotel.hotel}</p>
-                </div>
+                <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-transparent" />
                 <div className="absolute top-3 left-3 bg-[#ff8c42] text-white text-xs font-bold px-2.5 py-1 rounded-full">
-                  {hotel.price}
+                  {d.price}
+                </div>
+                <div className="absolute bottom-4 right-4 left-4 text-white">
+                  <h4 className="text-xl font-bold">{d.city}</h4>
+                  <p className="text-sm text-white/80 mb-3">{d.country}</p>
+                  <button
+                    onClick={scrollToTop}
+                    className="inline-flex items-center gap-1.5 bg-white/15 hover:bg-[#ff8c42] backdrop-blur border border-white/25 text-white text-sm font-semibold px-4 py-1.5 rounded-full transition"
+                  >
+                    <ChevronLeft className="w-4 h-4" /> استكشف
+                  </button>
                 </div>
               </div>
             </Card>
           ))}
+        </div>
+        <div className="flex items-center justify-center gap-2 mt-8">
+          <span className="w-6 h-2 rounded-full bg-[#ff8c42]" />
+          <span className="w-2 h-2 rounded-full bg-slate-300" />
+          <span className="w-2 h-2 rounded-full bg-slate-300" />
         </div>
       </section>
 
@@ -1024,17 +1149,17 @@ export default function Home() {
       <section id="services" className="bg-white py-16 border-y border-slate-100">
         <div className="container mx-auto px-4">
           <div className="text-center mb-10">
-            <h3 className="text-3xl font-bold text-[#1e3a5f]">خدماتنا المتميزة</h3>
-            <p className="text-slate-500 mt-2">كل ما تحتاجه لرحلة مثالية في مكان واحد</p>
+            <h3 className="text-3xl font-bold text-[#1e3a5f]">خدماتنا المميزة</h3>
+            <p className="text-slate-500 mt-2">نقدم لك كل ما تحتاجه لرحلة مثالية</p>
           </div>
-          <div className="grid md:grid-cols-3 gap-6">
+          <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-6">
             {services.map((s, i) => (
               <Card key={i} className="border border-slate-100 rounded-2xl shadow-card hover:shadow-card-hover transition group">
-                <CardContent className="p-8 text-center space-y-4">
+                <CardContent className="p-7 text-center space-y-4">
                   <div className="w-16 h-16 rounded-2xl bg-[#ff8c42]/10 flex items-center justify-center mx-auto group-hover:bg-[#ff8c42] transition-colors">
                     <s.icon className="w-8 h-8 text-[#ff8c42] group-hover:text-white transition-colors" />
                   </div>
-                  <h4 className="text-xl font-bold text-[#1e3a5f]">{s.title}</h4>
+                  <h4 className="text-lg font-bold text-[#1e3a5f]">{s.title}</h4>
                   <p className="text-slate-500 leading-relaxed text-sm">{s.desc}</p>
                 </CardContent>
               </Card>
@@ -1043,46 +1168,150 @@ export default function Home() {
         </div>
       </section>
 
-      {/* ─── CTA banner ─── */}
+      {/* ─── Best offers ─── */}
+      <section id="offers" className="container mx-auto px-4 py-16">
+        <div className="text-center mb-10">
+          <div className="inline-flex items-center gap-2 text-[#ff8c42] font-semibold text-sm mb-2">
+            <Percent className="w-4 h-4" /> عروض حصرية لوقت محدود
+          </div>
+          <h3 className="text-3xl font-bold text-[#1e3a5f]">أفضل العروض</h3>
+        </div>
+        <div className="grid md:grid-cols-3 gap-6">
+          {offers.map((o, i) => (
+            <Card key={i} className="border-0 rounded-2xl shadow-card hover:shadow-card-hover transition overflow-hidden group">
+              <div className={`relative h-48 overflow-hidden bg-gradient-to-br ${o.grad}`}>
+                <SmartImg
+                  src={o.image}
+                  alt={o.city}
+                  className="absolute inset-0 w-full h-full object-cover group-hover:scale-110 transition duration-500"
+                />
+                <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent" />
+                <div className="absolute top-3 right-3 bg-[#ff8c42] text-white text-xs font-extrabold px-3 py-1.5 rounded-full flex items-center gap-1 shadow-lg">
+                  <Percent className="w-3 h-3" /> خصم {o.discount}%
+                </div>
+                <div className="absolute bottom-3 right-4 left-4 text-white">
+                  <h4 className="text-xl font-bold">{o.city}</h4>
+                  <p className="text-xs text-white/80">{o.country}</p>
+                </div>
+              </div>
+              <CardContent className="p-5">
+                <div className="flex items-center gap-1.5 text-sm text-slate-500 mb-4">
+                  <Calendar className="w-4 h-4 text-[#ff8c42]" /> {o.nights}
+                </div>
+                <div className="flex items-end justify-between mb-4">
+                  <div>
+                    <p className="text-2xl font-extrabold text-[#ff8c42] leading-none">
+                      {sdg(o.newPrice)} <span className="text-sm font-bold">ج.س</span>
+                    </p>
+                    <p className="text-sm text-slate-400 line-through mt-1">{sdg(o.oldPrice)} ج.س</p>
+                  </div>
+                </div>
+                <Button
+                  className="w-full bg-[#ff8c42] hover:bg-[#ff7a2e] text-white flex items-center justify-center gap-2 rounded-xl h-11 font-bold"
+                  onClick={() => bookOfferViaWhatsApp(o.city, sdg(o.newPrice))}
+                >
+                  احجز الآن
+                </Button>
+              </CardContent>
+            </Card>
+          ))}
+        </div>
+      </section>
+
+      {/* ─── About ─── */}
+      <section id="about" className="bg-white py-16 border-y border-slate-100">
+        <div className="container mx-auto px-4 grid lg:grid-cols-2 gap-10 items-center">
+          <div className="space-y-4">
+            <div className="inline-flex items-center gap-2 text-[#ff8c42] font-semibold text-sm">
+              <BadgeCheck className="w-4 h-4" /> من نحن
+            </div>
+            <h3 className="text-3xl font-bold text-[#1e3a5f]">شريكك في اكتشاف العالم</h3>
+            <p className="text-slate-500 leading-relaxed">
+              في TravelHub نؤمن أن السفر يجب أن يكون سهلاً وممتعاً. نقدم لعملائنا في السودان أفضل أسعار الطيران
+              والفنادق وخدمات التأشيرات، مع دعم مباشر عبر واتساب على مدار الساعة لنجعل رحلتك القادمة تجربة لا تُنسى.
+            </p>
+            <div className="grid grid-cols-3 gap-4 pt-4">
+              {[
+                { num: "450+", label: "شركة طيران" },
+                { num: "1.5M+", label: "فندق حول العالم" },
+                { num: "24/7", label: "دعم متواصل" },
+              ].map((s, i) => (
+                <div key={i} className="text-center">
+                  <p className="text-2xl md:text-3xl font-extrabold text-[#ff8c42]">{s.num}</p>
+                  <p className="text-xs text-slate-500 mt-1">{s.label}</p>
+                </div>
+              ))}
+            </div>
+          </div>
+          <div className="grid grid-cols-2 gap-4">
+            <img src="/dubai-hotel.jpg" alt="dubai" className="rounded-2xl h-40 w-full object-cover shadow-card" />
+            <img src="/istanbul-hotel.jpg" alt="istanbul" className="rounded-2xl h-40 w-full object-cover shadow-card mt-6" />
+            <img src="/cairo-hotel.jpg" alt="cairo" className="rounded-2xl h-40 w-full object-cover shadow-card" />
+            <img src="/london-hotel.jpg" alt="london" className="rounded-2xl h-40 w-full object-cover shadow-card mt-6" />
+          </div>
+        </div>
+      </section>
+
+      {/* ─── Newsletter ─── */}
       <section className="container mx-auto px-4 py-14">
-        <div className="bg-brand-gradient rounded-3xl px-6 py-12 md:px-14 text-center text-white shadow-float relative overflow-hidden">
+        <div className="bg-brand-gradient rounded-3xl px-6 py-12 md:px-14 relative overflow-hidden">
           <div className="absolute -top-10 -left-10 w-40 h-40 rounded-full bg-[#ff8c42]/20 blur-3xl" />
-          <h3 className="text-2xl md:text-3xl font-bold mb-3 relative">جاهز لرحلتك القادمة؟</h3>
-          <p className="text-white/75 mb-6 relative max-w-lg mx-auto">فريقنا متاح على مدار الساعة لمساعدتك في حجز أفضل العروض عبر واتساب.</p>
-          <a
-            href={`https://wa.me/${WHATSAPP_NUMBER}`}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="relative inline-flex items-center gap-2 bg-[#25D366] hover:bg-[#20BA5A] text-white font-bold px-8 py-3 rounded-full transition shadow-lg shadow-green-500/25"
-          >
-            <MessageCircle className="w-5 h-5" /> تواصل معنا الآن
-          </a>
+          <div className="absolute -bottom-16 -right-10 w-52 h-52 rounded-full bg-blue-400/10 blur-3xl" />
+          <div className="relative grid md:grid-cols-2 gap-8 items-center">
+            <div className="text-white">
+              <div className="inline-flex items-center gap-2 text-[#ff8c42] font-semibold text-sm mb-2">
+                <Send className="w-4 h-4" /> نشرتنا البريدية
+              </div>
+              <h3 className="text-2xl md:text-3xl font-bold mb-2">اشترك في نشرتنا البريدية</h3>
+              <p className="text-white/75 text-sm max-w-md">
+                احصل على أفضل العروض والنصائح السفرية مباشرة إلى بريدك.
+              </p>
+            </div>
+            <form onSubmit={handleSubscribe} className="flex flex-col sm:flex-row gap-3">
+              <Input
+                type="email"
+                required
+                placeholder="أدخل بريدك الإلكتروني"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                className="h-12 rounded-xl bg-white border-0 flex-1 text-slate-800"
+              />
+              <Button
+                type="submit"
+                className="h-12 rounded-xl bg-[#ff8c42] hover:bg-[#ff7a2e] text-white font-bold px-8 shrink-0"
+              >
+                اشترك الآن
+              </Button>
+            </form>
+          </div>
         </div>
       </section>
 
       {/* ─── Contact ─── */}
-      <section id="contact" className="bg-brand-gradient text-white py-16">
+      <section id="contact" className="bg-slate-50 py-16">
         <div className="container mx-auto px-4">
           <div className="text-center mb-12">
-            <h2 className="text-3xl md:text-4xl font-bold">تواصل معنا مباشرة</h2>
-            <p className="text-white/70 mt-2">نحن هنا لخدمتك في أي وقت</p>
+            <h2 className="text-3xl md:text-4xl font-bold text-[#1e3a5f]">تواصل معنا مباشرة</h2>
+            <p className="text-slate-500 mt-2">نحن هنا لخدمتك في أي وقت</p>
           </div>
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 max-w-6xl mx-auto">
             {[
-              { icon: Phone, title: "اتصل بنا", value: "+249 114 610 204", href: `tel:+${PHONE_NUMBER}`, color: "text-[#ff8c42]" },
-              { icon: MessageCircle, title: "واتساب", value: "+249 960 278 594", href: `https://wa.me/${WHATSAPP_NUMBER}`, color: "text-[#25D366]" },
-              { icon: Mail, title: "البريد الإلكتروني", value: "hsn46475@gmail.com", href: "mailto:hsn46475@gmail.com", color: "text-[#ff8c42]" },
-              { icon: MapPin, title: "الموقع", value: "الخرطوم، السودان", href: null, color: "text-[#ff8c42]" },
+              { icon: Phone, title: "اتصل بنا", value: "+249 114 610 204", href: `tel:+${PHONE_NUMBER}`, color: "text-[#ff8c42]", bg: "bg-[#ff8c42]/10" },
+              { icon: MessageCircle, title: "واتساب", value: "+249 960 278 594", href: `https://wa.me/${WHATSAPP_NUMBER}`, color: "text-[#25D366]", bg: "bg-[#25D366]/10" },
+              { icon: Mail, title: "البريد الإلكتروني", value: EMAIL, href: `mailto:${EMAIL}`, color: "text-[#ff8c42]", bg: "bg-[#ff8c42]/10" },
+              { icon: MapPin, title: "الموقع", value: "الخرطوم، السودان", href: null, color: "text-[#ff8c42]", bg: "bg-[#ff8c42]/10" },
             ].map((c, i) => (
-              <div key={i} className="glass rounded-2xl p-6 text-center space-y-3 hover:bg-white/15 transition">
-                <c.icon className={`w-11 h-11 mx-auto ${c.color}`} />
-                <h3 className="text-base font-bold">{c.title}</h3>
+              <div key={i} className="bg-white rounded-2xl p-6 text-center space-y-3 shadow-card hover:shadow-card-hover transition">
+                <div className={`w-14 h-14 rounded-2xl ${c.bg} flex items-center justify-center mx-auto`}>
+                  <c.icon className={`w-7 h-7 ${c.color}`} />
+                </div>
+                <h3 className="text-base font-bold text-[#1e3a5f]">{c.title}</h3>
                 {c.href ? (
-                  <a href={c.href} target="_blank" rel="noopener noreferrer" className="block text-sm hover:text-[#ff8c42] transition break-all" dir="ltr">
+                  <a href={c.href} target="_blank" rel="noopener noreferrer" className="block text-sm text-slate-500 hover:text-[#ff8c42] transition break-all" dir="ltr">
                     {c.value}
                   </a>
                 ) : (
-                  <p className="text-sm text-white/85">{c.value}</p>
+                  <p className="text-sm text-slate-500">{c.value}</p>
                 )}
               </div>
             ))}
@@ -1091,52 +1320,110 @@ export default function Home() {
       </section>
 
       {/* ─── Footer ─── */}
-      <footer className="bg-[#0e2038] text-white py-12">
+      <footer className="bg-[#0e2038] text-white pt-14 pb-8">
         <div className="container mx-auto px-4">
-          <div className="grid md:grid-cols-4 gap-8 mb-8">
+          <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-8 mb-10">
+            {/* brand */}
             <div className="space-y-4">
-              <div className="flex items-center gap-2">
-                <div className="w-8 h-8 rounded-lg bg-[#ff8c42] flex items-center justify-center">
-                  <Plane className="w-4 h-4 text-white -rotate-45" />
+              <div className="flex items-center gap-2.5">
+                <div className="w-9 h-9 rounded-xl bg-[#ff8c42] flex items-center justify-center">
+                  <Plane className="w-5 h-5 text-white -rotate-45" />
                 </div>
-                <h4 className="text-xl font-bold"><span className="text-white">Travel</span><span className="text-[#ff8c42]">Hub</span></h4>
+                <span className="text-xl font-extrabold"><span className="text-white">Travel</span><span className="text-[#ff8c42]">Hub</span></span>
               </div>
               <p className="text-white/60 text-sm leading-relaxed">
-                وجهتك الموثوقة لاستكشاف العالم. أفضل أسعار الطيران والفنادق وخدمات التأشيرات.
+                شريكك في اكتشاف العالم وتجربة سفر لا تُنسى. أفضل أسعار الطيران والفنادق وخدمات التأشيرات.
               </p>
+              <div className="flex items-center gap-2.5">
+                {[Facebook, Instagram, Twitter, Linkedin].map((Icon, i) => (
+                  <a
+                    key={i}
+                    href="#"
+                    className="w-9 h-9 rounded-lg bg-white/10 hover:bg-[#ff8c42] flex items-center justify-center transition"
+                    aria-label="social"
+                  >
+                    <Icon className="w-4 h-4" />
+                  </a>
+                ))}
+              </div>
             </div>
+
+            {/* quick links */}
             <div className="space-y-3">
-              <h5 className="font-bold mb-3">خدماتنا</h5>
+              <h5 className="font-bold mb-3">روابط سريعة</h5>
               <ul className="space-y-2 text-sm text-white/60">
-                {["حجز الطيران", "حجز الفنادق", "استخراج التأشيرات", "برامج سياحية"].map((s) => (
-                  <li key={s} className="flex items-center gap-1.5 hover:text-[#ff8c42] transition cursor-pointer">
-                    <ChevronLeft className="w-3 h-3 text-[#ff8c42]" /> {s}
+                {[
+                  { href: "#home", label: "الرئيسية" },
+                  { href: "#destinations", label: "الوجهات" },
+                  { href: "#offers", label: "العروض" },
+                  { href: "#hotels", label: "الفنادق" },
+                  { href: "#contact", label: "تواصل معنا" },
+                ].map((l) => (
+                  <li key={l.label}>
+                    <a href={l.href} className="flex items-center gap-1.5 hover:text-[#ff8c42] transition">
+                      <ChevronLeft className="w-3 h-3 text-[#ff8c42]" /> {l.label}
+                    </a>
                   </li>
                 ))}
               </ul>
             </div>
+
+            {/* services */}
             <div className="space-y-3">
-              <h5 className="font-bold mb-3">معلومات التواصل</h5>
+              <h5 className="font-bold mb-3">خدماتنا</h5>
               <ul className="space-y-2 text-sm text-white/60">
-                <li dir="ltr" className="text-right">هاتف: +249 114 610 204</li>
-                <li dir="ltr" className="text-right">واتساب: +249 960 278 594</li>
-                <li className="break-all">hsn46475@gmail.com</li>
+                {[
+                  { icon: Plane, label: "حجز طيران" },
+                  { icon: Hotel, label: "حجز فندق" },
+                  { icon: Car, label: "تأجير سيارات" },
+                  { icon: FileText, label: "التأشيرات" },
+                  { icon: ShieldCheck, label: "التأمين السفري" },
+                ].map((s) => (
+                  <li key={s.label} className="flex items-center gap-2 hover:text-[#ff8c42] transition cursor-pointer">
+                    <s.icon className="w-3.5 h-3.5 text-[#ff8c42]" /> {s.label}
+                  </li>
+                ))}
               </ul>
             </div>
+
+            {/* contact info */}
             <div className="space-y-3">
-              <h5 className="font-bold mb-3">ساعات العمل</h5>
-              <ul className="space-y-2 text-sm text-white/60">
-                <li className="flex items-center gap-2"><Clock className="w-4 h-4 text-[#ff8c42]" /> متوفرون على مدار الأسبوع</li>
-                <li>24 ساعة في اليوم</li>
-                <li className="text-white/40 text-xs mt-2">الخرطوم، السودان</li>
+              <h5 className="font-bold mb-3">معلومات</h5>
+              <ul className="space-y-3 text-sm text-white/60">
+                <li className="flex items-center gap-2.5" dir="ltr">
+                  <Phone className="w-4 h-4 text-[#ff8c42] shrink-0" /> <span>+249 114 610 204</span>
+                </li>
+                <li className="flex items-center gap-2.5" dir="ltr">
+                  <Mail className="w-4 h-4 text-[#ff8c42] shrink-0" /> <span>{EMAIL}</span>
+                </li>
+                <li className="flex items-center gap-2.5" dir="ltr">
+                  <MessageCircle className="w-4 h-4 text-[#25D366] shrink-0" /> <span>+249 960 278 594</span>
+                </li>
+                <li className="flex items-center gap-2.5">
+                  <MapPin className="w-4 h-4 text-[#ff8c42] shrink-0" /> <span>الخرطوم، السودان</span>
+                </li>
               </ul>
             </div>
           </div>
-          <div className="border-t border-white/10 pt-6 text-center">
-            <p className="text-white/50 text-sm">© Travel Hub 2025. جميع الحقوق محفوظة</p>
+
+          <div className="border-t border-white/10 pt-6 flex flex-col md:flex-row items-center justify-between gap-3 text-sm text-white/50">
+            <p>© 2025 Travel Hub. جميع الحقوق محفوظة</p>
+            <div className="flex items-center gap-5">
+              <a href="#" className="hover:text-[#ff8c42] transition">سياسة الخصوصية</a>
+              <a href="#" className="hover:text-[#ff8c42] transition">الشروط والأحكام</a>
+            </div>
           </div>
         </div>
       </footer>
+
+      {/* ─── Scroll to top ─── */}
+      <button
+        onClick={scrollToTop}
+        aria-label="العودة للأعلى"
+        className="fixed bottom-6 left-6 z-50 w-12 h-12 rounded-full bg-[#ff8c42] hover:bg-[#ff7a2e] text-white flex items-center justify-center shadow-lg shadow-orange-500/30 transition hover:-translate-y-0.5"
+      >
+        <ArrowUp className="w-5 h-5" />
+      </button>
     </div>
   )
 }
