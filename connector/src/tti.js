@@ -15,24 +15,19 @@ function parseDate(iso) {
   return { d, m, y }
 }
 
-// تسجيل الدخول لخط معيّن (login + password + code شركة).
+// تسجيل الدخول لخط معيّن (login + password + code شركة). ✅ محدّدات مؤكّدة.
 async function login(page, carrier) {
   const L = SELECTORS.login
-  // صفحة الدخول على otds/index.asp
-  const loginUrl = config.portalUrl.replace(/\/newUI\/.*$/i, "/otds/index.asp")
+  const loginUrl = new URL(L.loginPath, config.portalUrl).toString()
   await page.goto(loginUrl, { waitUntil: "domcontentloaded" })
 
-  // TODO: تأكيد أسماء الحقول من HTML صفحة الدخول. حالياً نستخدم النوع/الترتيب.
-  const texts = page.locator('input[type="text"], input:not([type])')
-  await texts.nth(0).fill(carrier.login) // Login
-  await page.locator(L.password).first().fill(carrier.password) // Password
-  if (carrier.code) await texts.nth(1).fill(carrier.code) // company identification code
+  await page.fill(L.username, carrier.login)
+  await page.fill(L.password, carrier.password)
+  await page.fill(L.code, carrier.code) // كود الشركة (3TAIR / BADR / SUDANAIR)
 
   await Promise.all([
     page.waitForLoadState("domcontentloaded"),
-    page.getByRole("button", { name: L.submitText }).click().catch(async () => {
-      await page.locator('input[type="submit"]').first().click()
-    }),
+    page.click(L.submit),
   ])
   await page.waitForSelector(L.loggedInMarker, { timeout: 20000 })
 }

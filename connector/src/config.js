@@ -37,16 +37,15 @@ export const config = {
 // ✅ محدّدات البحث مؤكّدة من HTML الحقيقي لصفحة newUI/index.asp.
 // ⏳ محدّدات الدخول والنتائج بحاجة لتأكيد من HTML صفحتَي otds/index.asp و SearchResult.aspx.
 export const SELECTORS = {
-  // صفحة الدخول: emea.ttinteractive.com/otds/index.asp
-  // (بعناوين ظاهرة: Login / Password / Login company identification code / Sign in)
+  // صفحة الدخول: emea.ttinteractive.com/otds/index.asp — ✅ مؤكّدة من الـ HTML.
   login: {
-    // نستخدم نصوص العناوين لأنها أوضح؛ تُراجَع عند وصول HTML صفحة الدخول. TODO
-    username: 'input[name="login" i], input#login',                 // TODO تأكيد
-    password: 'input[type="password"]',
-    code: 'input[name*="company" i], input[name*="code" i]',        // كود الخط — TODO تأكيد
-    submitText: /sign in|connexion/i,
-    // بعد نجاح الدخول تظهر لوحة Zenith (mainMenu / زر Book a flight)
-    loggedInMarker: '#mainMenu, .flightSearchAction, a.DelogLink',
+    loginPath: "/otds/index.asp",
+    username: "#login",
+    password: "#pwd",
+    code: "#LoginCompanyIdentificationCode",
+    submit: "#signInButton",
+    // بعد نجاح الدخول تظهر لوحة Zenith (mainMenu / زر Book a flight / رابط الخروج)
+    loggedInMarker: "#mainMenu, .flightSearchAction, a.DelogLink",
   },
 
   // نموذج البحث داخل newUI/index.asp — مؤكّد من الـ HTML.
