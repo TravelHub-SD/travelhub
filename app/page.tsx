@@ -104,28 +104,24 @@ function SmartImg({ src, alt, className }: { src: string; alt: string; className
   return <img src={src || "/placeholder.svg"} alt={alt} className={className} onError={() => setErr(true)} />
 }
 
-// شعار TravelHub: علامة متجهية (SVG) + نص، مع بديل احتياطي
-function Logo({ dark = false }: { dark?: boolean }) {
+// شعار TravelHub الأصلي، مع بديل نصّي احتياطي
+function Logo() {
   const [err, setErr] = useState(false)
-  return (
-    <div className="flex items-center gap-2.5">
-      {err ? (
-        <div className="w-10 h-10 rounded-xl bg-[#ff8c42] flex items-center justify-center shadow-lg shadow-orange-500/20">
-          <Plane className="w-5 h-5 text-white -rotate-45" />
-        </div>
-      ) : (
-        <img
-          src="/travelhub-logo.svg"
-          alt="TravelHub"
-          className="w-10 h-10 object-contain"
-          onError={() => setErr(true)}
-        />
-      )}
-      <span className="text-xl font-extrabold tracking-tight leading-none">
-        <span className={dark ? "text-white" : "text-[#1f3a5f]"}>Travel</span>
+  if (err) {
+    return (
+      <span className="text-2xl font-extrabold tracking-tight">
+        <span className="text-[#1f3a5f]">Travel</span>
         <span className="text-[#ff8c42]">Hub</span>
       </span>
-    </div>
+    )
+  }
+  return (
+    <img
+      src="/travelhub-logo.png"
+      alt="TravelHub"
+      className="h-12 w-auto object-contain"
+      onError={() => setErr(true)}
+    />
   )
 }
 
