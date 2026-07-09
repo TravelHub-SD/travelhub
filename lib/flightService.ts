@@ -60,7 +60,7 @@ export interface SearchParams {
 
 export interface FlightSearchResponse {
   data: Flight[]
-  meta: { source: "duffel" | "mock"; currency: string }
+  meta: { source: string; currency: string; warnings?: string[] }
 }
 
 // ─── مساعدات التحويل ─────────────────────────────────────────────────────────
@@ -224,24 +224,13 @@ function mockFlights({ origin, destination, departureDate }: Required<SearchPara
   return { data, meta: { source: "mock", currency: "USD" } }
 }
 
-// ─── الدالة الرئيسية ─────────────────────────────────────────────────────────
+// ─── Duffel ──────────────────────────────────────────────────────────────────
 
-export async function searchFlights(params: SearchParams): Promise<FlightSearchResponse> {
-  const origin = params.origin?.trim().toUpperCase()
-  const destination = params.destination?.trim().toUpperCase()
-  const departureDate = params.departureDate?.trim()
-  const adults = Math.max(1, Math.min(9, Number(params.adults) || 1))
-
-  if (!origin || !destination || !departureDate) {
-    throw new Error("يرجى إدخال مطار المغادرة والوجهة وتاريخ السفر")
-  }
-
+async function fetchDuffelFlights(p: Required<SearchParams>): Promise<Flight[]> {
   const token = process.env.DUFFEL_API_KEY
-  if (!token) {
-    return mockFlights({ origin, destination, departureDate, adults })
-  }
+  if (!token) return []
 
-  const passengers = Array.from({ length: adults }, () => ({ type: "adult" }))
+  const passengers = Array.from({ length: p.adults }, () => ({ type: "adult" }))
 
   const response = await fetch(DUFFEL_API_URL, {
     method: "POST",
@@ -253,7 +242,7 @@ export async function searchFlights(params: SearchParams): Promise<FlightSearchR
     },
     body: JSON.stringify({
       data: {
-        slices: [{ origin, destination, departure_date: departureDate }],
+        slices: [{ origin: p.origin, destination: p.destination, departure_date: p.departureDate }],
         passengers,
         cabin_class: "economy",
       },
@@ -268,12 +257,94 @@ export async function searchFlights(params: SearchParams): Promise<FlightSearchR
 
   const json = await response.json()
   const offers: any[] = json?.data?.offers ?? []
+  return offers.map(mapDuffelOffer)
+}
 
-  const data = offers
-    .map(mapDuffelOffer)
-    .sort((a, b) => Number.parseFloat(a.price.total) - Number.parseFloat(b.price.total))
-    .slice(0, 20)
+// ─── موصّل الخطوط السودانية (بوابة TTI) ───────────────────────────────────────
+// يستدعي خدمة الموصّل المستقلة (connector/) التي تكشط بوابة TTI.
+// يُضبط عبر SUDAN_CONNECTOR_URL و CONNECTOR_API_KEY.
 
-  const currency = data[0]?.price.currency ?? "USD"
-  return { data, meta: { source: "duffel", currency } }
+async function fetchSudanFlights(
+  p: Required<SearchParams>,
+): Promise<{ flights: Flight[]; warnings: string[] }> {
+  const url = process.env.SUDAN_CONNECTOR_URL
+  if (!url) return { flights: [], warnings: [] }
+
+  const controller = new AbortController()
+  const timeout = setTimeout(() => controller.abort(), 20000)
+  try {
+    const res = await fetch(`${url.replace(/\/$/, "")}/search`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "x-connector-key": process.env.CONNECTOR_API_KEY ?? "",
+      },
+      body: JSON.stringify(p),
+      signal: controller.signal,
+    })
+    if (!res.ok) return { flights: [], warnings: [`connector: HTTP ${res.status}`] }
+    const json = await res.json()
+    return { flights: (json?.data as Flight[]) ?? [], warnings: json?.meta?.warnings ?? [] }
+  } catch (e) {
+    // فشل الموصّل يجب ألا يُسقط البحث كلّه — نسجّله كتحذير فقط.
+    return { flights: [], warnings: [`connector: ${e instanceof Error ? e.message : String(e)}`] }
+  } finally {
+    clearTimeout(timeout)
+  }
+}
+
+// ─── الدالة الرئيسية ─────────────────────────────────────────────────────────
+
+export async function searchFlights(params: SearchParams): Promise<FlightSearchResponse> {
+  const origin = params.origin?.trim().toUpperCase()
+  const destination = params.destination?.trim().toUpperCase()
+  const departureDate = params.departureDate?.trim()
+  const adults = Math.max(1, Math.min(9, Number(params.adults) || 1))
+
+  if (!origin || !destination || !departureDate) {
+    throw new Error("يرجى إدخال مطار المغادرة والوجهة وتاريخ السفر")
+  }
+
+  const p: Required<SearchParams> = { origin, destination, departureDate, adults }
+
+  const hasDuffel = Boolean(process.env.DUFFEL_API_KEY)
+  const hasConnector = Boolean(process.env.SUDAN_CONNECTOR_URL)
+
+  // لا مزوّد مضبوط → بيانات تجريبية عشان الفلو يبقى قابلاً للعرض.
+  if (!hasDuffel && !hasConnector) {
+    return mockFlights({ origin, destination, departureDate, adults })
+  }
+
+  const [duffelRes, sudanRes] = await Promise.allSettled([fetchDuffelFlights(p), fetchSudanFlights(p)])
+
+  const data: Flight[] = []
+  const sources: string[] = []
+  const warnings: string[] = []
+
+  if (duffelRes.status === "fulfilled") {
+    if (duffelRes.value.length) sources.push("duffel")
+    data.push(...duffelRes.value)
+  } else if (hasDuffel) {
+    warnings.push(duffelRes.reason instanceof Error ? duffelRes.reason.message : String(duffelRes.reason))
+  }
+
+  if (sudanRes.status === "fulfilled") {
+    if (sudanRes.value.flights.length) sources.push("tti")
+    data.push(...sudanRes.value.flights)
+    warnings.push(...sudanRes.value.warnings)
+  }
+
+  // كل المزوّدات فشلت ولا نتائج → اعرض الخطأ لو Duffel هو الوحيد المضبوط.
+  if (data.length === 0 && hasDuffel && !hasConnector && duffelRes.status === "rejected") {
+    throw duffelRes.reason
+  }
+
+  data.sort((a, b) => Number.parseFloat(a.price.total) - Number.parseFloat(b.price.total))
+  const trimmed = data.slice(0, 30)
+
+  const currency = trimmed[0]?.price.currency ?? "USD"
+  return {
+    data: trimmed,
+    meta: { source: sources.join("+") || "mock", currency, ...(warnings.length ? { warnings } : {}) },
+  }
 }

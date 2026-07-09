@@ -1,0 +1,20 @@
+{
+  "name": "travelhub-tti-connector",
+  "version": "0.1.0",
+  "private": true,
+  "description": "خدمة موصّل تجلب رحلات الخطوط السودانية (بدر/تاركو/سودانير) من بوابة TTI عبر أتمتة متصفح، وترجّعها بشكل متوافق مع موقع TravelHub.",
+  "type": "module",
+  "main": "src/server.js",
+  "scripts": {
+    "start": "node src/server.js",
+    "dev": "node --watch src/server.js",
+    "postinstall": "playwright install chromium"
+  },
+  "dependencies": {
+    "express": "^4.21.2",
+    "playwright": "^1.49.1"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}

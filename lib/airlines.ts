@@ -30,6 +30,8 @@ export const AIRLINES: Record<string, Airline> = {
   IA: { nameAr: "الخطوط العراقية", nameEn: "Iraqi Airways" },
   RB: { nameAr: "السورية للطيران", nameEn: "Syrian Air" },
   SD: { nameAr: "سودانير", nameEn: "Sudan Airways" },
+  J4: { nameAr: "بدر للطيران", nameEn: "Badr Airlines" },
+  "3T": { nameAr: "تاركو للطيران", nameEn: "Tarco Airlines" },
   // تركيا وأوروبا
   TK: { nameAr: "الخطوط التركية", nameEn: "Turkish Airlines" },
   PC: { nameAr: "بيغاسوس", nameEn: "Pegasus Airlines" },
