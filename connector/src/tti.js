@@ -5,9 +5,9 @@
 // ما تزال تحتاج تأكيداً (HTML صفحة الدخول + صفحة SearchResult.aspx)
 // وموسومة بـ TODO.
 // ─────────────────────────────────────────────────────────────
-import { config, SELECTORS, CITY_TO_IATA } from "./config.js"
+import { config, SELECTORS } from "./config.js"
 import { getLoggedInPage, invalidateSession } from "./browser.js"
-import { normalizeRow } from "./normalize.js"
+import { flightsFromServerModel } from "./normalize.js"
 
 // "2026-08-01" → { d, m, y }
 function parseDate(iso) {
@@ -95,39 +95,32 @@ async function runSearch(page, { origin, destination, departureDate, adults }) {
   await page.waitForTimeout(1500) // مهلة لعرض النتائج داخل الـ iframe
 }
 
-// كشط صفوف النتائج من داخل iframe#mainFrame.
-async function scrape(page, dateStr) {
-  const S = SELECTORS.results
+// قراءة نتائج البحث من كائن Knockout المضمّن في صفحة النتائج
+// (TTIModel.FlightListDisplay.ServerModel) بدل كشط DOM — أدقّ وأثبت.
+async function readResults(page, carrier) {
   const frame = page.frame({ name: "mainFrame" })
   if (!frame) return []
 
-  if (await frame.$(S.empty)) return []
-  await frame.waitForSelector(S.row, { timeout: 15000 }).catch(() => {})
+  // انتظر تحميل صفحة FlightListDisplay وتعريف الكائن
+  await frame
+    .waitForFunction(
+      () => window.TTIModel?.FlightListDisplay?.ServerModel != null,
+      { timeout: 25000 },
+    )
+    .catch(() => null)
 
-  const rows = await frame.$$eval(
-    S.row,
-    (els, sel) => {
-      const t = (el, q) => (q && el.querySelector(q)?.textContent?.trim()) || ""
-      return els.map((el) => ({
-        airline: t(el, sel.airline),
-        flightNo: t(el, sel.flightNo),
-        depTime: t(el, sel.depTime),
-        depCity: t(el, sel.depCode),
-        arrTime: t(el, sel.arrTime),
-        arrCity: t(el, sel.arrCode),
-        price: t(el, sel.price),
-      }))
-    },
-    S,
-  )
+  const model = await frame
+    .evaluate(() => {
+      try {
+        return window.TTIModel?.FlightListDisplay?.ServerModel ?? null
+      } catch {
+        return null
+      }
+    })
+    .catch(() => null)
 
-  // حوّل أسماء المدن إلى أكواد IATA
-  return rows.map((r) => ({
-    ...r,
-    depCode: CITY_TO_IATA[r.depCity] || r.depCity,
-    arrCode: CITY_TO_IATA[r.arrCity] || r.arrCity,
-    dateStr,
-  }))
+  if (!model) return []
+  return flightsFromServerModel(model, carrier)
 }
 
 // البحث عبر خط واحد → مصفوفة رحلات مطبّعة. يبتلع الأخطاء ويرجّع [] مع تسجيلها.
@@ -137,14 +130,8 @@ export async function searchCarrier(carrier, params) {
     const res = await getLoggedInPage(carrier, login)
     page = res.page
     await runSearch(page, params)
-    const rawRows = await scrape(page, params.departureDate)
-    return {
-      carrier: carrier.name,
-      flights: rawRows
-        .filter((r) => r.depCode && r.arrCode)
-        .map((r) => normalizeRow({ ...r, airlineIata: carrier.iata }, carrier)),
-      error: null,
-    }
+    const flights = await readResults(page, carrier)
+    return { carrier: carrier.name, flights, error: null }
   } catch (err) {
     await invalidateSession(carrier.code) // جلسة قد تكون انتهت — أعِد الدخول لاحقاً
     return { carrier: carrier.name, flights: [], error: err?.message || String(err) }

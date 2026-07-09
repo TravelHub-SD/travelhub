@@ -44,10 +44,18 @@ curl -X POST localhost:8080/search -H 'content-type: application/json' \
    - `SUDAN_CONNECTOR_URL=https://<your-connector-host>`
    - `CONNECTOR_API_KEY=<نفس المفتاح>`
 
-## ⚠️ ما يزال يحتاج ضبطاً: المحدّدات (Selectors)
-المحدّدات في `src/config.js` **مبدئية** لأننا لم نفحص البوابة بعد. لضبطها، شارك
-لقطات/HTML لثلاث صفحات: **الدخول**، **نموذج البحث**، **جدول النتائج**. كل محدّد
-موسوم بـ `TODO`. بعد ضبطها، اختبر بـ `MOCK=0`.
+## الحالة: المحدّدات مؤكّدة ✅
+تم تأكيد كل الخطوات من HTML الحقيقي لبوابة Zenith:
+- **الدخول** (`otds/index.asp`): `#login` / `#pwd` / `#LoginCompanyIdentificationCode` / `#signInButton`.
+- **البحث** (`newUI/index.asp`, نموذج `frmbook`): قوائم `#id_depart`/`#id_arrivee`
+  (اختيار بالـ IATA)، تاريخ `#DepartureDate`، إرسال `#btSubmit`.
+- **النتائج**: لا كشط DOM — نقرأ كائن `TTIModel.FlightListDisplay.ServerModel`
+  (Knockout) مباشرة من `iframe#mainFrame`، وفيه الأسعار والضرائب والأمتعة
+  ودرجات الأسعار والأوقات وعدد المقاعد.
+
+يتبقّى فقط: ضبط `TTI_CARRIERS` ببياناتك، النشر، ثم **اختبار حيّ واحد** بـ `MOCK=0`
+للتأكد من أن التدفّق يعمل من طرف لطرف على البوابة الفعلية (البيئة السحابية هنا
+تحجب الوصول للبوابة، لذا لا يمكن الاختبار الحيّ إلا على خدمتك).
 
 ## ملاحظات أمنية
 - بيانات الدخول تُخزَّن كأسرار على الخدمة فقط، لا في الكود ولا في git.

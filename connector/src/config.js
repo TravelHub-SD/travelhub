@@ -28,7 +28,8 @@ export const config = {
   headless: (process.env.HEADLESS ?? "true") !== "false",
   sessionTtlMs: num(process.env.SESSION_TTL_MINUTES, 15) * 60_000,
   cacheTtlMs: num(process.env.CACHE_TTL_SECONDS, 120) * 1000,
-  sdgPerUsd: num(process.env.SDG_PER_USD, 0),
+  // أسعار البوابة بالجنيه السوداني؛ الافتراضي 3650 ليطابق سعر الموقع عند العرض.
+  sdgPerUsd: num(process.env.SDG_PER_USD, 3650),
   mock: process.env.MOCK === "1",
   carriers, // [{ name, iata, login, password, code }]
 }
@@ -65,19 +66,10 @@ export const SELECTORS = {
     resultsFrame: 'iframe#mainFrame',            // النتائج تُعرض هنا
   },
 
-  // جدول النتائج داخل iframe#mainFrame (SearchResult.aspx).
-  // البنية المرئية معروفة، لكن أسماء العناصر تحتاج HTML صفحة النتائج. TODO
-  results: {
-    row: '.flightRow, .fareRow',                 // TODO تأكيد
-    airline: '.airline, .flightNumber',          // شارة مثل "SD 207" — TODO
-    flightNo: '.flightNumber',                   // TODO
-    depTime: '.departure .time',                 // "06:00" — TODO
-    depCode: '.departure .city',                 // "Port Sudan" — TODO
-    arrTime: '.arrival .time',                   // "07:00" — TODO
-    arrCode: '.arrival .city',                   // "Khartoum" — TODO
-    price: '.totalPrice',                        // "750,000 SDG" — TODO
-    empty: '.noResult, .noFlights',              // TODO
-  },
+  // ✅ النتائج: لا نكشط DOM. صفحة النتائج (FlightListDisplay) تطبيق Knockout
+  // وكل البيانات في كائن JS: window.TTIModel.FlightListDisplay.ServerModel
+  // (PricedTripsSummary + DataReferenceAirports/FareBasis/BookingClasses…).
+  // نقرأه مباشرة من داخل iframe#mainFrame — انظر tti.js/normalize.js.
 }
 
 // خريطة اسم المدينة الظاهر في النتائج → كود IATA (النتائج تعرض أسماء مدن).
