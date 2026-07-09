@@ -1,71 +1,138 @@
 // ─────────────────────────────────────────────────────────────
-// منطق أتمتة بوابة TTI: تسجيل الدخول، البحث، وكشط النتائج لكل خط.
+// منطق أتمتة بوابة Zenith (TTI): تسجيل الدخول، البحث، وكشط النتائج.
 //
-// ⚠️ الخطوات أدناه هيكلية ومبنية على محدّدات مبدئية في config.js.
-//    بعد فحص البوابة الحقيقية (صور/HTML) نضبط الخطوات والمحدّدات.
-//    كل مكان يحتاج مراجعة موسوم بـ TODO.
+// محدّدات البحث مؤكّدة من HTML الحقيقي. محدّدات الدخول والنتائج
+// ما تزال تحتاج تأكيداً (HTML صفحة الدخول + صفحة SearchResult.aspx)
+// وموسومة بـ TODO.
 // ─────────────────────────────────────────────────────────────
-import { config, SELECTORS } from "./config.js"
+import { config, SELECTORS, CITY_TO_IATA } from "./config.js"
 import { getLoggedInPage, invalidateSession } from "./browser.js"
 import { normalizeRow } from "./normalize.js"
 
-// تسجيل الدخول لخط معيّن (login + password + code).
+// "2026-08-01" → { d, m, y }
+function parseDate(iso) {
+  const [y, m, d] = iso.split("-").map(Number)
+  return { d, m, y }
+}
+
+// تسجيل الدخول لخط معيّن (login + password + code شركة).
 async function login(page, carrier) {
-  await page.goto(config.portalUrl, { waitUntil: "domcontentloaded" })
-  await page.fill(SELECTORS.login.username, carrier.login)
-  await page.fill(SELECTORS.login.password, carrier.password)
-  if (carrier.code && SELECTORS.login.code) {
-    // بعض البوابات تختار الخط عبر حقل كود، وبعضها عبر قائمة منسدلة — نضبطها لاحقاً. TODO
-    await page.fill(SELECTORS.login.code, carrier.code).catch(() => {})
-  }
+  const L = SELECTORS.login
+  // صفحة الدخول على otds/index.asp
+  const loginUrl = config.portalUrl.replace(/\/newUI\/.*$/i, "/otds/index.asp")
+  await page.goto(loginUrl, { waitUntil: "domcontentloaded" })
+
+  // TODO: تأكيد أسماء الحقول من HTML صفحة الدخول. حالياً نستخدم النوع/الترتيب.
+  const texts = page.locator('input[type="text"], input:not([type])')
+  await texts.nth(0).fill(carrier.login) // Login
+  await page.locator(L.password).first().fill(carrier.password) // Password
+  if (carrier.code) await texts.nth(1).fill(carrier.code) // company identification code
+
   await Promise.all([
     page.waitForLoadState("domcontentloaded"),
-    page.click(SELECTORS.login.submit),
+    page.getByRole("button", { name: L.submitText }).click().catch(async () => {
+      await page.locator('input[type="submit"]').first().click()
+    }),
   ])
-  // تأكيد نجاح الدخول
-  await page.waitForSelector(SELECTORS.login.loggedInMarker, { timeout: 15000 })
+  await page.waitForSelector(L.loggedInMarker, { timeout: 20000 })
 }
 
-// تعبئة نموذج البحث وتنفيذه.
+// اختيار مطار في قائمة منسدلة عبر كود IATA (السمة airportCode على الـ option).
+async function selectAirport(page, selectSel, iata) {
+  const value = await page.$eval(
+    selectSel,
+    (sel, code) => {
+      const opt = [...sel.options].find(
+        (o) => (o.getAttribute("airportCode") || "").toUpperCase() === code,
+      )
+      return opt ? opt.value : null
+    },
+    iata,
+  )
+  if (!value) throw new Error(`المطار ${iata} غير متاح في ${selectSel}`)
+  await page.selectOption(selectSel, value)
+}
+
+// تعبئة نموذج البحث وتنفيذه (رحلة ذهاب فقط).
 async function runSearch(page, { origin, destination, departureDate, adults }) {
-  await page.fill(SELECTORS.search.origin, origin)
-  await page.fill(SELECTORS.search.destination, destination)
-  await page.fill(SELECTORS.search.date, departureDate) // TODO: قد تحتاج تنسيق DD/MM/YYYY
-  if (SELECTORS.search.adults) {
-    await page.fill(SELECTORS.search.adults, String(adults)).catch(() => {})
-  }
-  await Promise.all([
-    page.waitForLoadState("networkidle"),
-    page.click(SELECTORS.search.submit),
-  ])
+  const S = SELECTORS.search
+  // افتح لوحة "Book a flight"
+  await page.click(S.openPanel).catch(() => {})
+  // انتظر تعبئة قائمة المطارات عبر JS
+  await page.waitForFunction(
+    (sel) => document.querySelectorAll(`${sel} option`).length > 1,
+    S.origin,
+    { timeout: 15000 },
+  )
+
+  await selectAirport(page, S.origin, origin)
+  // تغيير المغادرة يعيد ملء الوجهة — ننتظر ثم نختار
+  await page.waitForTimeout(300)
+  await selectAirport(page, S.destination, destination)
+
+  // نوع الرحلة: ذهاب فقط
+  await page.check(S.tripTypeOneWay).catch(() => {})
+
+  // التاريخ عبر datepicker + النص
+  const { d, m, y } = parseDate(departureDate)
+  await page.evaluate(
+    ({ sel, d, m, y }) => {
+      const el = document.querySelector(sel)
+      const val = `${String(d).padStart(2, "0")}/${String(m).padStart(2, "0")}/${y}`
+      const $ = window.jQuery
+      try {
+        if ($ && $(el).datepicker) $(el).datepicker("setDate", new Date(y, m - 1, d))
+      } catch {}
+      if (el) el.value = val
+    },
+    { sel: S.date, d, m, y },
+  )
+
+  // عدد البالغين (أول حقل ركّاب)
+  await page.locator(S.adultsInput).first().fill(String(adults))
+
+  // إرسال — النتائج تظهر في iframe#mainFrame
+  const wait = page
+    .waitForResponse((r) => /SearchResult\.aspx/i.test(r.url()), { timeout: 30000 })
+    .catch(() => null)
+  await page.click(S.submit)
+  await wait
+  await page.waitForTimeout(1500) // مهلة لعرض النتائج داخل الـ iframe
 }
 
-// كشط صفوف النتائج من الصفحة.
+// كشط صفوف النتائج من داخل iframe#mainFrame.
 async function scrape(page, dateStr) {
-  // لا نتائج؟
-  const empty = await page.$(SELECTORS.results.empty)
-  if (empty) return []
-
-  await page.waitForSelector(SELECTORS.results.row, { timeout: 15000 }).catch(() => {})
-
   const S = SELECTORS.results
-  const rows = await page.$$eval(
+  const frame = page.frame({ name: "mainFrame" })
+  if (!frame) return []
+
+  if (await frame.$(S.empty)) return []
+  await frame.waitForSelector(S.row, { timeout: 15000 }).catch(() => {})
+
+  const rows = await frame.$$eval(
     S.row,
     (els, sel) => {
-      const text = (el, q) => (q && el.querySelector(q)?.textContent?.trim()) || ""
+      const t = (el, q) => (q && el.querySelector(q)?.textContent?.trim()) || ""
       return els.map((el) => ({
-        airlineIata: text(el, sel.airline),
-        flightNo: text(el, sel.flightNo),
-        depTime: text(el, sel.depTime),
-        depCode: text(el, sel.depCode),
-        arrTime: text(el, sel.arrTime),
-        arrCode: text(el, sel.arrCode),
-        price: text(el, sel.price),
+        airline: t(el, sel.airline),
+        flightNo: t(el, sel.flightNo),
+        depTime: t(el, sel.depTime),
+        depCity: t(el, sel.depCode),
+        arrTime: t(el, sel.arrTime),
+        arrCity: t(el, sel.arrCode),
+        price: t(el, sel.price),
       }))
     },
     S,
   )
-  return rows.map((r) => ({ ...r, dateStr }))
+
+  // حوّل أسماء المدن إلى أكواد IATA
+  return rows.map((r) => ({
+    ...r,
+    depCode: CITY_TO_IATA[r.depCity] || r.depCity,
+    arrCode: CITY_TO_IATA[r.arrCity] || r.arrCity,
+    dateStr,
+  }))
 }
 
 // البحث عبر خط واحد → مصفوفة رحلات مطبّعة. يبتلع الأخطاء ويرجّع [] مع تسجيلها.
@@ -80,12 +147,11 @@ export async function searchCarrier(carrier, params) {
       carrier: carrier.name,
       flights: rawRows
         .filter((r) => r.depCode && r.arrCode)
-        .map((r) => normalizeRow({ ...r, airlineIata: r.airlineIata || carrier.iata }, carrier)),
+        .map((r) => normalizeRow({ ...r, airlineIata: carrier.iata }, carrier)),
       error: null,
     }
   } catch (err) {
-    // جلسة قد تكون انتهت — أبطلها ليعاد الدخول في الطلب القادم.
-    await invalidateSession(carrier.code)
+    await invalidateSession(carrier.code) // جلسة قد تكون انتهت — أعِد الدخول لاحقاً
     return { carrier: carrier.name, flights: [], error: err?.message || String(err) }
   } finally {
     if (page) await page.close().catch(() => {})

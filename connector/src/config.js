@@ -33,36 +33,65 @@ export const config = {
   carriers, // [{ name, iata, login, password, code }]
 }
 
-// محدّدات الصفحات — تُملأ/تُراجَع بعد فحص البوابة الحقيقية.
+// محدّدات صفحات بوابة Zenith (TTI).
+// ✅ محدّدات البحث مؤكّدة من HTML الحقيقي لصفحة newUI/index.asp.
+// ⏳ محدّدات الدخول والنتائج بحاجة لتأكيد من HTML صفحتَي otds/index.asp و SearchResult.aspx.
 export const SELECTORS = {
+  // صفحة الدخول: emea.ttinteractive.com/otds/index.asp
+  // (بعناوين ظاهرة: Login / Password / Login company identification code / Sign in)
   login: {
-    // حقول نموذج تسجيل الدخول
-    username: 'input[name="login"]',      // TODO: تأكيد الاسم الحقيقي
-    password: 'input[name="password"]',   // TODO
-    code: 'input[name="code"]',           // كود الخط (3tair/badr/sudanair) — TODO
-    submit: 'input[type="submit"], button[type="submit"]', // TODO
-    // عنصر يظهر فقط بعد نجاح الدخول (للتأكد أن الجلسة فعّالة)
-    loggedInMarker: '#mainMenu, a[href*="logout" i]', // TODO
+    // نستخدم نصوص العناوين لأنها أوضح؛ تُراجَع عند وصول HTML صفحة الدخول. TODO
+    username: 'input[name="login" i], input#login',                 // TODO تأكيد
+    password: 'input[type="password"]',
+    code: 'input[name*="company" i], input[name*="code" i]',        // كود الخط — TODO تأكيد
+    submitText: /sign in|connexion/i,
+    // بعد نجاح الدخول تظهر لوحة Zenith (mainMenu / زر Book a flight)
+    loggedInMarker: '#mainMenu, .flightSearchAction, a.DelogLink',
   },
+
+  // نموذج البحث داخل newUI/index.asp — مؤكّد من الـ HTML.
+  // ملاحظة: يُرسل GET إلى SearchResult.aspx، والنتائج تُعرض داخل iframe#mainFrame.
   search: {
-    origin: 'input[name="from"]',         // TODO
-    destination: 'input[name="to"]',      // TODO
-    date: 'input[name="depDate"]',        // TODO (صيغة التاريخ قد تختلف — نضبطها لاحقاً)
-    adults: 'input[name="adt"]',          // TODO
-    submit: '#btnSearch, button[type="submit"]', // TODO
+    form: 'form[name="frmbook"]',
+    openPanel: '.flightSearchAction',            // زر "Book a flight" يفتح لوحة البحث
+    origin: '#id_depart',                        // <select> كل option فيه سمة airportCode=IATA
+    destination: '#id_arrivee',                  // <select> (يُعاد ملؤه عند تغيير المغادرة)
+    tripTypeOneWay: '#TypeTrajetAllersimple',    // radio value=0
+    tripTypeRoundTrip: '#TypeTrajetAllerRetour', // radio value=1
+    date: '#DepartureDate',                      // نص DD/MM/YYYY (jQuery UI datepicker)
+    returnDate: '#ArrivalDate',
+    adultsInput: '.tripPaxes .pax input',        // أول input = بالغين
+    fareClass: 'select[name="id_classe"]',       // -1 Public fares (افتراضي)
+    submit: '#btSubmit',
+    resultsFrame: 'iframe#mainFrame',            // النتائج تُعرض هنا
   },
+
+  // جدول النتائج داخل iframe#mainFrame (SearchResult.aspx).
+  // البنية المرئية معروفة، لكن أسماء العناصر تحتاج HTML صفحة النتائج. TODO
   results: {
-    // صف الرحلة الواحد في جدول النتائج
-    row: 'table.results tr.flightRow',    // TODO
-    // داخل الصف:
-    airline: '.airline',                  // TODO
-    flightNo: '.flightNo',                // TODO
-    depTime: '.dep .time',                // TODO
-    depCode: '.dep .code',                // TODO
-    arrTime: '.arr .time',                // TODO
-    arrCode: '.arr .code',                // TODO
-    price: '.price',                      // TODO
-    // عنصر يدل على عدم وجود نتائج
-    empty: '.noResults',                  // TODO
+    row: '.flightRow, .fareRow',                 // TODO تأكيد
+    airline: '.airline, .flightNumber',          // شارة مثل "SD 207" — TODO
+    flightNo: '.flightNumber',                   // TODO
+    depTime: '.departure .time',                 // "06:00" — TODO
+    depCode: '.departure .city',                 // "Port Sudan" — TODO
+    arrTime: '.arrival .time',                   // "07:00" — TODO
+    arrCode: '.arrival .city',                   // "Khartoum" — TODO
+    price: '.totalPrice',                        // "750,000 SDG" — TODO
+    empty: '.noResult, .noFlights',              // TODO
   },
+}
+
+// خريطة اسم المدينة الظاهر في النتائج → كود IATA (النتائج تعرض أسماء مدن).
+export const CITY_TO_IATA = {
+  "Khartoum": "KRT",
+  "Port Sudan": "PZU",
+  "Nyala": "UYL",
+  "El Fasher": "ELF",
+  "El Obeid": "EBD",
+  "Dongola": "DOG",
+  "Kassala": "KSL",
+  "Wadi Halfa": "WHF",
+  "Geneina": "EGN",
+  "Atbara": "ATB",
+  "Merowe": "MWE",
 }
