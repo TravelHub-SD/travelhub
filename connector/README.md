@@ -36,13 +36,38 @@ curl -X POST localhost:8080/search -H 'content-type: application/json' \
 | `SDG_PER_USD` | لو الأسعار بالجنيه، سعر الصرف للتحويل إلى دولار؛ 0 = بلا تحويل. |
 | `MOCK` | `1` لإرجاع بيانات تجريبية بدل الاتصال بالبوابة. |
 
-## النشر (Railway / Render / VPS)
-1. انشر مجلد `connector/` كخدمة Node مستقلة.
-2. اضبط متغيّرات البيئة أعلاه (بما فيها `TTI_CARRIERS` كسرّ).
-3. تأكد أن `postinstall` نزّل Chromium (أو أضف صورة Docker مع متصفح).
-4. خذ عنوان الخدمة العام، وضعه في Vercel للموقع:
-   - `SUDAN_CONNECTOR_URL=https://<your-connector-host>`
-   - `CONNECTOR_API_KEY=<نفس المفتاح>`
+## النشر على Railway (موصى به)
+الخدمة تُبنى عبر `Dockerfile` (صورة Playwright الرسمية — Chromium جاهز).
+
+1. **أنشئ مشروعاً** على [railway.com](https://railway.com) ← New Project ← Deploy from GitHub repo ← اختر `travelhub-sd/travelhub`.
+2. في إعدادات الخدمة ← **Settings** ← **Root Directory** = `connector`
+   (ليجد Railway ملفّي `Dockerfile` و`railway.json` هنا؛ سيبني بـ Docker تلقائياً).
+3. **Variables**: أضف متغيّرات البيئة (انظر الجدول أدناه). `PORT` يحقنه Railway تلقائياً — لا تضبطه.
+4. **Deploy**، ثم من **Settings ← Networking ← Generate Domain** احصل على رابط عام
+   مثل `https://travelhub-connector-production.up.railway.app`.
+5. تحقّق: افتح `https://<domain>/health` — يجب أن يرجّع `{"ok":true,...}`.
+
+### متغيّرات البيئة على Railway
+| المتغيّر | مثال / قيمة |
+|---|---|
+| `CONNECTOR_API_KEY` | سلسلة عشوائية طويلة (سرّ) |
+| `TTI_PORTAL_URL` | `https://emea.ttinteractive.com/newUI/index.asp` |
+| `TTI_CARRIERS` | JSON بالخطوط (سرّ) — انظر `.env.example` |
+| `SDG_PER_USD` | `3650` |
+| `SESSION_TTL_MINUTES` | `15` |
+| `CACHE_TTL_SECONDS` | `120` |
+| `HEADLESS` | `true` |
+| `MOCK` | `0` (اجعلها `1` مؤقتاً للتجربة بلا بوابة) |
+
+## الخطوة الأخيرة: ربط الموقع بالموصّل (على Vercel)
+بعد أن يعمل الموصّل، اربطه بموقع TravelHub:
+
+1. في **Vercel** ← مشروع الموقع ← **Settings ← Environment Variables** أضف:
+   - `SUDAN_CONNECTOR_URL` = رابط Railway (بدون `/` في النهاية).
+   - `CONNECTOR_API_KEY` = نفس المفتاح المضبوط على Railway.
+2. **أعِد نشر** الموقع (Redeploy) ليأخذ المتغيّرات.
+3. ابحث عن رحلة داخلية (مثل `PZU → KRT`) — يجب أن تظهر رحلات بدر/تاركو/سودانير
+   مدموجة مع نتائج Duffel.
 
 ## الحالة: المحدّدات مؤكّدة ✅
 تم تأكيد كل الخطوات من HTML الحقيقي لبوابة Zenith:

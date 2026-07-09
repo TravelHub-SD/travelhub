@@ -69,7 +69,8 @@ app.post("/search", async (req, res) => {
   res.json(payload)
 })
 
-const server = app.listen(config.port, () => {
+// 0.0.0.0 مطلوب على منصّات الحاويات (Railway) لتصل الطلبات الخارجية.
+const server = app.listen(config.port, "0.0.0.0", () => {
   console.log(`[tti-connector] يعمل على المنفذ ${config.port} — الخطوط: ${config.carriers.map((c) => c.name).join(", ") || "(mock)"}`)
 })
 

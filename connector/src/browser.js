@@ -8,7 +8,11 @@ async function getBrowser() {
   if (!browserPromise) {
     browserPromise = config.browserWsEndpoint
       ? chromium.connectOverCDP(config.browserWsEndpoint) // متصفح مُستضاف (Browserbase/Browserless)
-      : chromium.launch({ headless: config.headless })    // متصفح محلي على الخدمة
+      : chromium.launch({
+          headless: config.headless,
+          // إعدادات ملائمة للحاويات (Railway/Docker)
+          args: ["--no-sandbox", "--disable-dev-shm-usage", "--disable-gpu"],
+        })
   }
   return browserPromise
 }
