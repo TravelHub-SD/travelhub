@@ -32,67 +32,74 @@ async function login(page, carrier) {
   await page.waitForSelector(L.loggedInMarker, { timeout: 20000 })
 }
 
-// اختيار مطار في قائمة منسدلة عبر كود IATA (السمة airportCode على الـ option).
-async function selectAirport(page, selectSel, iata) {
-  const value = await page.$eval(
-    selectSel,
-    (sel, code) => {
-      const opt = [...sel.options].find(
-        (o) => (o.getAttribute("airportCode") || "").toUpperCase() === code,
-      )
-      return opt ? opt.value : null
-    },
-    iata,
-  )
-  if (!value) throw new Error(`المطار ${iata} غير متاح في ${selectSel}`)
-  await page.selectOption(selectSel, value)
+// يحصل على إطار محرّك الحجز (داخل mainFrame) بعد فتحه، وينتظر جاهزية النموذج.
+async function getBookingFrame(page) {
+  await page.click(SELECTORS.search.openPanel).catch(() => {}) // زر "Book a flight"
+  for (let i = 0; i < 40; i++) {
+    const frame = page.frame({ name: "mainFrame" })
+    if (frame && (await frame.$("#CalendarID0").catch(() => null))) return frame
+    await page.waitForTimeout(500)
+  }
+  throw new Error("لم يُحمّل نموذج البحث (محرّك الحجز)")
 }
 
-// تعبئة نموذج البحث وتنفيذه (رحلة ذهاب فقط).
-async function runSearch(page, { origin, destination, departureDate, adults }) {
-  const S = SELECTORS.search
-  // افتح لوحة "Book a flight"
-  await page.click(S.openPanel).catch(() => {})
-  // انتظر تعبئة قائمة المطارات عبر JS
-  await page.waitForFunction(
-    (sel) => document.querySelectorAll(`${sel} option`).length > 1,
-    S.origin,
-    { timeout: 15000 },
-  )
-
-  await selectAirport(page, S.origin, origin)
-  // تغيير المغادرة يعيد ملء الوجهة — ننتظر ثم نختار
-  await page.waitForTimeout(300)
-  await selectAirport(page, S.destination, destination)
-
-  // نوع الرحلة: ذهاب فقط
-  await page.check(S.tripTypeOneWay).catch(() => {})
-
-  // التاريخ عبر datepicker + النص
-  const { d, m, y } = parseDate(departureDate)
-  await page.evaluate(
-    ({ sel, d, m, y }) => {
-      const el = document.querySelector(sel)
-      const val = `${String(d).padStart(2, "0")}/${String(m).padStart(2, "0")}/${y}`
-      const $ = window.jQuery
-      try {
-        if ($ && $(el).datepicker) $(el).datepicker("setDate", new Date(y, m - 1, d))
-      } catch {}
-      if (el) el.value = val
+// يختار مطاراً في قائمة منسدلة (Knockout) عبر كود IATA.
+// القائمتان الأولى/الثانية = المغادرة/الوجهة. ننقر العنصر الذي <strong> فيه = الكود.
+async function selectBookingAirport(frame, menuIndex, iata) {
+  // افتح القائمة (اختياري لكنه يساعد بعض الـ bindings)
+  await frame.locator(".dropdown-toggle").nth(menuIndex).click().catch(() => {})
+  await frame.waitForTimeout(300)
+  const ok = await frame.evaluate(
+    ({ menuIndex, iata }) => {
+      const menu = document.querySelectorAll(".dropdown-menu")[menuIndex]
+      if (!menu) return false
+      const link = Array.from(menu.querySelectorAll("a")).find(
+        (a) => a.querySelector("strong")?.textContent?.trim().toUpperCase() === iata.toUpperCase(),
+      )
+      if (link) {
+        link.click()
+        return true
+      }
+      return false
     },
-    { sel: S.date, d, m, y },
+    { menuIndex, iata },
   )
+  if (!ok) throw new Error(`المطار ${iata} غير متاح في القائمة`)
+}
 
-  // عدد البالغين (أول حقل ركّاب)
-  await page.locator(S.adultsInput).first().fill(String(adults))
+// تعبئة نموذج محرّك الحجز وتنفيذه (رحلة ذهاب فقط).
+async function runSearch(page, { origin, destination, departureDate }) {
+  const frame = await getBookingFrame(page)
 
-  // إرسال — النتائج تظهر في iframe#mainFrame
-  const wait = page
-    .waitForResponse((r) => /SearchResult\.aspx/i.test(r.url()), { timeout: 30000 })
-    .catch(() => null)
-  await page.click(S.submit)
-  await wait
-  await page.waitForTimeout(1500) // مهلة لعرض النتائج داخل الـ iframe
+  // نوع الرحلة: ذهاب فقط (افتراضي غالباً، لكن نؤكّده)
+  await frame.getByText("One way", { exact: true }).first().click().catch(() => {})
+
+  // انتظر امتلاء قوائم المطارات
+  await frame
+    .waitForFunction(() => document.querySelector(".dropdown-menu a strong") != null, { timeout: 15000 })
+    .catch(() => {})
+
+  await selectBookingAirport(frame, 0, origin) // المغادرة
+  await frame.waitForTimeout(600) // تُعاد تعبئة قائمة الوجهة حسب المغادرة
+  await selectBookingAirport(frame, 1, destination) // الوجهة
+
+  // التاريخ DD/MM/YYYY
+  const { d, m, y } = parseDate(departureDate)
+  const dateStr = `${String(d).padStart(2, "0")}/${String(m).padStart(2, "0")}/${y}`
+  await frame.evaluate((val) => {
+    const el = document.querySelector("#CalendarID0")
+    if (el) {
+      el.value = val
+      el.dispatchEvent(new Event("change", { bubbles: true }))
+      el.dispatchEvent(new Event("blur", { bubbles: true }))
+    }
+  }, dateStr)
+
+  // إرسال البحث
+  await frame
+    .locator("button:has-text('Search flights'), a:has-text('Search flights'), :text('Search flights')")
+    .first()
+    .click()
 }
 
 // قراءة نتائج البحث من كائن Knockout المضمّن في صفحة النتائج
