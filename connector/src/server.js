@@ -12,10 +12,12 @@ import { shutdownBrowser } from "./browser.js"
 const app = express()
 app.use(express.json())
 
-// حماية بسيطة بمفتاح مشترك (موقعك يرسله في x-connector-key)
+// حماية بسيطة بمفتاح مشترك: عبر هيدر x-connector-key (للموقع)
+// أو عبر ?key= في الرابط (لتسهيل الاختبار من المتصفح).
 app.use((req, res, next) => {
   if (req.path === "/health") return next()
-  if (config.apiKey && req.get("x-connector-key") !== config.apiKey) {
+  const provided = req.get("x-connector-key") || req.query.key
+  if (config.apiKey && provided !== config.apiKey) {
     return res.status(401).json({ error: "unauthorized" })
   }
   next()
@@ -25,48 +27,53 @@ app.get("/health", (_req, res) => {
   res.json({ ok: true, carriers: config.carriers.map((c) => c.name), mock: config.mock })
 })
 
-app.post("/search", async (req, res) => {
-  const origin = String(req.body.origin || "").trim().toUpperCase()
-  const destination = String(req.body.destination || "").trim().toUpperCase()
-  const departureDate = String(req.body.departureDate || "").trim()
-  const adults = Math.max(1, Math.min(9, Number(req.body.adults) || 1))
+// المنطق المشترك للبحث.
+async function doSearch({ origin, destination, departureDate, adults }) {
+  origin = String(origin || "").trim().toUpperCase()
+  destination = String(destination || "").trim().toUpperCase()
+  departureDate = String(departureDate || "").trim()
+  adults = Math.max(1, Math.min(9, Number(adults) || 1))
 
   if (!origin || !destination || !departureDate) {
-    return res.status(400).json({ error: "origin, destination, departureDate مطلوبة" })
+    return { status: 400, body: { error: "origin, destination, departureDate مطلوبة" } }
   }
 
   const params = { origin, destination, departureDate, adults }
   const cacheKey = `${origin}-${destination}-${departureDate}-${adults}`
 
   const cached = cacheGet(cacheKey)
-  if (cached) return res.json({ ...cached, meta: { ...cached.meta, cached: true } })
+  if (cached) return { status: 200, body: { ...cached, meta: { ...cached.meta, cached: true } } }
 
   // وضع تجريبي
   if (config.mock || config.carriers.length === 0) {
     const data = mockCarrierFlights(params)
     const payload = { data, meta: { source: "mock", carriers: ["تاركو", "بدر", "سودانير"], warnings: [] } }
     cacheSet(cacheKey, payload, config.cacheTtlMs)
-    return res.json(payload)
+    return { status: 200, body: payload }
   }
 
   // بحث فعلي عبر كل الخطوط بالتوازي
   const results = await Promise.all(config.carriers.map((c) => searchCarrier(c, params)))
   const data = results.flatMap((r) => r.flights)
   const warnings = results.filter((r) => r.error).map((r) => `${r.carrier}: ${r.error}`)
-
   data.sort((a, b) => Number(a.price.total) - Number(b.price.total))
 
-  const payload = {
-    data,
-    meta: {
-      source: "tti",
-      carriers: config.carriers.map((c) => c.name),
-      warnings,
-    },
-  }
-  // نخزّن فقط لو فيه نتائج فعلية (لا نخبّئ فشلاً)
-  if (data.length) cacheSet(cacheKey, payload, config.cacheTtlMs)
-  res.json(payload)
+  const payload = { data, meta: { source: "tti", carriers: config.carriers.map((c) => c.name), warnings } }
+  if (data.length) cacheSet(cacheKey, payload, config.cacheTtlMs) // لا نخبّئ فشلاً
+  return { status: 200, body: payload }
+}
+
+// نقطة الموقع (POST).
+app.post("/search", async (req, res) => {
+  const { status, body } = await doSearch(req.body || {})
+  res.status(status).json(body)
+})
+
+// نقطة اختبار من المتصفح (GET):
+// /search?origin=PZU&destination=KRT&departureDate=2026-07-14&key=XXX
+app.get("/search", async (req, res) => {
+  const { status, body } = await doSearch(req.query || {})
+  res.status(status).json(body)
 })
 
 // 0.0.0.0 مطلوب على منصّات الحاويات (Railway) لتصل الطلبات الخارجية.
