@@ -137,15 +137,22 @@ export async function debugCarrier(carrier, { screenshot = false } = {}) {
     const dump = frame
       ? await frame
           .evaluate(() => {
-            const q = (sel) => Array.from(document.querySelectorAll(sel))
-            const txt = (el) => (el.textContent || "").replace(/\s+/g, " ").trim().slice(0, 30)
+            const q = (sel, root = document) => Array.from(root.querySelectorAll(sel))
+            const txt = (el) => (el.textContent || "").replace(/\s+/g, " ").trim()
+            const toggles = q(".dropdown-toggle").map((t) => txt(t).slice(0, 25))
+            const menus = q(".dropdown-menu").slice(0, 8).map((m) => ({
+              n: m.querySelectorAll("li,a").length,
+              items: q("li a, li", m).map((a) => txt(a)).filter(Boolean).slice(0, 5),
+            }))
+            const firstItem = document.querySelector(".dropdown-menu li a, .dropdown-menu a, .dropdown-menu li")
             return {
               url: location.href,
               title: document.title,
-              forms: q("form").map((f) => f.getAttribute("action") || f.getAttribute("name") || "?"),
-              selects: q("select").map((s) => s.id || s.name || "?"),
-              inputs: q("input").slice(0, 50).map((i) => `${i.type}:${i.name || i.id || "?"}`),
-              buttons: q("button, .btn, [role=button]").map(txt).filter(Boolean).slice(0, 40),
+              toggles,
+              menus,
+              firstItemHtml: firstItem ? firstItem.outerHTML.slice(0, 400) : null,
+              hasDateInput: !!document.querySelector("#CalendarID0"),
+              hasSearchBtn: !!q("button, a, input").find((b) => /search flights/i.test(b.textContent || b.value || "")),
             }
           })
           .catch((e) => ({ error: String(e) }))
