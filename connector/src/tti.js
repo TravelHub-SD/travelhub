@@ -129,19 +129,33 @@ export async function debugCarrier(carrier, { screenshot = false } = {}) {
   const { page } = await getLoggedInPage(carrier, login)
   try {
     const afterLoginUrl = page.url()
+    // افتح محرّك الحجز (Book a flight) وامنحه وقتاً للتحميل داخل mainFrame
     await page.click(SELECTORS.search.openPanel).catch(() => {})
-    await page.waitForTimeout(6000) // امنح mainFrame وقتاً لتحميل محرّك الحجز
+    await page.waitForTimeout(8000)
+
     const frame = page.frame({ name: "mainFrame" })
+    const dump = frame
+      ? await frame
+          .evaluate(() => {
+            const q = (sel) => Array.from(document.querySelectorAll(sel))
+            const txt = (el) => (el.textContent || "").replace(/\s+/g, " ").trim().slice(0, 30)
+            return {
+              url: location.href,
+              title: document.title,
+              forms: q("form").map((f) => f.getAttribute("action") || f.getAttribute("name") || "?"),
+              selects: q("select").map((s) => s.id || s.name || "?"),
+              inputs: q("input").slice(0, 50).map((i) => `${i.type}:${i.name || i.id || "?"}`),
+              buttons: q("button, .btn, [role=button]").map(txt).filter(Boolean).slice(0, 40),
+            }
+          })
+          .catch((e) => ({ error: String(e) }))
+      : null
+
     const facts = {
       afterLoginUrl,
-      mainFrameUrl: frame ? frame.url() : null,
       dockOriginOptions: await page.$$eval("#id_depart option", (o) => o.length).catch(() => -1),
-      hasDockFrmbook: (await page.$('form[name="frmbook"]')) ? true : false,
-      mainFrameSelects: frame ? await frame.$$eval("select", (s) => s.length).catch(() => -1) : null,
-      mainFrameForms: frame
-        ? await frame.$$eval("form", (fs) => fs.map((f) => f.getAttribute("action") || f.name || "?")).catch(() => null)
-        : null,
-      mainFrameHtmlLen: frame ? (await frame.content().catch(() => "")).length : 0,
+      mainFrameUrl: frame ? frame.url() : null,
+      mainFrame: dump,
     }
     if (screenshot) {
       const buf = await page.screenshot({ fullPage: false })

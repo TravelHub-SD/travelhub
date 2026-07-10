@@ -1,6 +1,6 @@
 // إدارة المتصفح وجلسات الدخول (سياق مستقل لكل خط، يُعاد استخدامه).
 import { chromium } from "playwright"
-import { config } from "./config.js"
+import { config, SELECTORS } from "./config.js"
 
 let browserPromise = null
 
@@ -33,7 +33,17 @@ export async function getLoggedInPage(carrier, loginFn) {
 
   if (fresh) {
     const page = await existing.context.newPage()
-    return { page, reused: true }
+    // مهم: الصفحة الجديدة تبدأ فارغة (about:blank) — ننتقل بها للوحة التحكّم
+    // (الكوكيز محفوظة في السياق فتبقى الجلسة مسجّلة الدخول).
+    await page.goto(config.portalUrl, { waitUntil: "domcontentloaded" }).catch(() => {})
+    // لو انتهت الجلسة على الخادم وعُدنا لصفحة الدخول، أعِد تسجيل الدخول.
+    const stillIn = await page.$(SELECTORS.login.loggedInMarker)
+    if (!stillIn) {
+      await existing.context.close().catch(() => {})
+      sessions.delete(key)
+    } else {
+      return { page, reused: true }
+    }
   }
 
   // أغلق الجلسة القديمة إن وُجدت
