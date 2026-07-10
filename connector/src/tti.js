@@ -33,11 +33,15 @@ async function login(page, carrier) {
 }
 
 // يحصل على إطار محرّك الحجز (داخل mainFrame) بعد فتحه، وينتظر جاهزية النموذج.
+// مهلة أطول + إعادة نقر، لأن التحميل قد يبطؤ عند تشغيل عدّة خطوط بالتوازي.
 async function getBookingFrame(page) {
-  await page.click(SELECTORS.search.openPanel).catch(() => {}) // زر "Book a flight"
-  for (let i = 0; i < 40; i++) {
+  const S = SELECTORS.search
+  await page.waitForSelector(S.openPanel, { timeout: 20000 }).catch(() => {})
+  await page.click(S.openPanel).catch(() => {}) // زر "Book a flight"
+  for (let i = 0; i < 80; i++) {
     const frame = page.frame({ name: "mainFrame" })
     if (frame && (await frame.$("#CalendarID0").catch(() => null))) return frame
+    if (i === 20 || i === 45) await page.click(S.openPanel).catch(() => {}) // أعد المحاولة
     await page.waitForTimeout(500)
   }
   throw new Error("لم يُحمّل نموذج البحث (محرّك الحجز)")
