@@ -59,6 +59,9 @@ const formatPrice = (usdPrice: string) => {
   return { usd: price.toFixed(2), sdg: sdgPrice.toLocaleString("ar-SA") }
 }
 
+// أسعار الرحلات تأتي بالجنيه السوداني مباشرة من الموصّل — بلا تحويل دولار.
+const fmtSDG = (sdg: string) => (Math.round(Number.parseFloat(sdg) || 0)).toLocaleString("ar-SA")
+
 const sdg = (n: number) => n.toLocaleString("ar-SA")
 
 // PT7H15M -> "7 س 15 د"
@@ -653,7 +656,7 @@ export default function Home() {
                       className="w-full accent-[#ff8c42]"
                     />
                     <p className="text-xs text-slate-500">
-                      حتى <span className="font-bold text-[#ff8c42]">{formatPrice(String(effectiveMax)).sdg} ج.س</span>
+                      حتى <span className="font-bold text-[#ff8c42]">{fmtSDG(String(effectiveMax))} ج.س</span>
                     </p>
                   </div>
 
@@ -752,7 +755,7 @@ export default function Home() {
                   )}
 
                   {sorted.map(({ flight, index, price, dur, stops }: any) => {
-                    const prices = formatPrice(flight.price.total)
+                    const priceSdg = fmtSDG(flight.price.total)
                     const segments = flight.itineraries[0].segments
                     const first = segments[0]
                     const last = segments[segments.length - 1]
@@ -864,9 +867,8 @@ export default function Home() {
                             {/* Price + CTA */}
                             <div className="bg-slate-50/70 border-t lg:border-t-0 lg:border-r border-slate-100 p-5 md:p-6 flex flex-col justify-center lg:min-w-[240px]">
                               <div className="text-center lg:text-right mb-3">
-                                <p className="text-sm text-slate-400 line-through">${prices.usd}</p>
                                 <p className="text-3xl font-extrabold text-[#ff8c42] leading-none">
-                                  {prices.sdg} <span className="text-lg font-bold">ج.س</span>
+                                  {priceSdg} <span className="text-lg font-bold">ج.س</span>
                                 </p>
                                 <p className="text-xs text-slate-400 mt-1">للشخص الواحد · شامل الضرائب</p>
                               </div>
@@ -877,7 +879,7 @@ export default function Home() {
                                     origin: first.departure.iataCode,
                                     destination: last.arrival.iataCode,
                                     date: new Date(first.departure.at).toLocaleDateString(language === "ar" ? "ar-SA" : "en-US"),
-                                    price: prices.sdg,
+                                    price: priceSdg,
                                   })
                                 }
                               >
@@ -969,7 +971,7 @@ export default function Home() {
         const segments = flight.itineraries[0].segments
         const first = segments[0]
         const last = segments[segments.length - 1]
-        const prices = formatPrice(flight.price.total)
+        const priceSdg = fmtSDG(flight.price.total)
         const fmtTime = (t: string) =>
           new Date(t).toLocaleTimeString(language === "ar" ? "ar-SA" : "en-US", { hour: "2-digit", minute: "2-digit" })
         const fmtDate = (t: string) =>
@@ -1077,7 +1079,7 @@ export default function Home() {
               <div className="sticky bottom-0 bg-white border-t border-slate-100 p-4 flex items-center justify-between gap-4">
                 <div>
                   <p className="text-xs text-slate-400">السعر الإجمالي</p>
-                  <p className="text-2xl font-extrabold text-[#ff8c42] leading-none">{prices.sdg} <span className="text-sm">ج.س</span></p>
+                  <p className="text-2xl font-extrabold text-[#ff8c42] leading-none">{priceSdg} <span className="text-sm">ج.س</span></p>
                 </div>
                 <Button
                   className="bg-[#25D366] hover:bg-[#20BA5A] text-white flex items-center gap-2 rounded-xl h-11 px-6 font-bold"
@@ -1086,7 +1088,7 @@ export default function Home() {
                       origin: first.departure.iataCode,
                       destination: last.arrival.iataCode,
                       date: new Date(first.departure.at).toLocaleDateString(language === "ar" ? "ar-SA" : "en-US"),
-                      price: prices.sdg,
+                      price: priceSdg,
                     })
                   }
                 >

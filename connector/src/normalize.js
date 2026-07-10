@@ -1,6 +1,5 @@
-// تحويل بيانات Zenith (TTI) إلى شكل الرحلة المتوافق مع موقع TravelHub
-// (نفس واجهة Flight في lib/flightService.ts).
-import { config } from "./config.js"
+// تحويل بيانات Zenith (TTI) إلى شكل الرحلة المتوافق مع موقع TravelHub.
+// الأسعار بالجنيه السوداني (SDG) مباشرة — بلا تحويل للدولار.
 
 const KIWI_LOGO = (iata) =>
   iata ? `https://images.kiwi.com/airlines/128/${iata.toUpperCase()}.png` : "/abstract-airline-logo.png"
@@ -13,20 +12,25 @@ function cabinAr(code) {
   return "الاقتصادية"
 }
 
-// يحوّل السعر (بالجنيه السوداني) إلى دولار حسب SDG_PER_USD.
-// ملاحظة: الموقع يعرض total×سعر الصرف كجنيه؛ فبضبط SDG_PER_USD = نفس سعر
-// الموقع (3650) يظهر السعر بالجنيه مطابقاً لأصله.
-function toUsd(amountSDG) {
-  const n = Number(String(amountSDG).replace(/[^\d.]/g, "")) || 0
-  if (config.sdgPerUsd > 0) return (n / config.sdgPerUsd).toFixed(2)
-  return n.toFixed(2)
+// صفحة Zenith تحوّل حقول التاريخ أحياناً إلى كائنات moment بعد التحميل.
+// هذه الدالة تُرجّع نصّاً ISO سواء كانت القيمة نصاً أو كائن moment.
+function asDate(v) {
+  if (!v) return null
+  if (typeof v === "string") return v
+  if (typeof v === "object") return v._i || v._d || null
+  return null
 }
 
-// دقائق بين وقتين ISO → صيغة مدة ISO8601 (PT#H#M)
+// دقائق بين وقتين → صيغة مدة ISO8601 (PT#H#M)
 function durIso(fromIso, toIso) {
-  const mins = Math.max(0, Math.round((new Date(toIso) - new Date(fromIso)) / 60000))
+  const a = new Date(fromIso).getTime()
+  const b = new Date(toIso).getTime()
+  if (!Number.isFinite(a) || !Number.isFinite(b)) return ""
+  const mins = Math.max(0, Math.round((b - a) / 60000))
   return `PT${Math.floor(mins / 60)}H${mins % 60}M`
 }
+
+const sdgTotal = (amount) => String(Math.round(Number(String(amount).replace(/[^\d.]/g, "")) || 0))
 
 // ─── المسار التجريبي (mock): صف بأوقات نصية ─────────────────────────────
 function toIsoFromTime(dateStr, timeStr, addDay = 0) {
@@ -45,7 +49,7 @@ export function normalizeRow(row, carrier) {
   const dur = durIso(depIso, arrIso)
   return {
     id: `tti_${carrier.code}_${row.flightNo || Math.random().toString(36).slice(2)}`,
-    price: { total: toUsd(row.price), currency: "USD" },
+    price: { total: sdgTotal(row.price), currency: "SDG" },
     numberOfBookableSeats: row.seats ?? null,
     airlineLogo: KIWI_LOGO(iata),
     cabinClass: row.cabin || "الاقتصادية",
@@ -77,7 +81,6 @@ export function normalizeRow(row, carrier) {
 }
 
 // ─── المسار الحقيقي: من كائن TTIModel.FlightListDisplay.ServerModel ─────────
-// يبني قائمة رحلات من الـ JSON المضمّن في صفحة النتائج.
 export function flightsFromServerModel(model, carrier) {
   if (!model) return []
   const airports = Object.fromEntries((model.DataReferenceAirports || []).map((a) => [a.DataId, a]))
@@ -114,12 +117,14 @@ export function flightsFromServerModel(model, carrier) {
           cabinCode = bClass[cheapest.DataIdBookingClass]?.Code || cabinCode
         }
 
-        const depAt = seg.DepartureDate?.DateTime
-        const arrAt = seg.ArrivalDate?.DateTime
-        const depGmt = seg.DepartureDate?.DateTimeGMT || depAt
-        const arrGmt = seg.ArrivalDate?.DateTimeGMT || arrAt
+        const depAt = asDate(seg.DepartureDate?.DateTime)
+        const arrAt = asDate(seg.ArrivalDate?.DateTime)
+        const depGmt = asDate(seg.DepartureDate?.DateTimeGMT) || depAt
+        const arrGmt = asDate(seg.ArrivalDate?.DateTimeGMT) || arrAt
         const airlineIata = seg.FlightDesignator?.AirlineDesignator || carrier.iata
         return {
+          _depGmt: depGmt,
+          _arrGmt: arrGmt,
           departure: { iataCode: airports[seg.DataIdOrigin]?.Code || "", at: depAt },
           arrival: { iataCode: airports[seg.DataIdDestination]?.Code || "", at: arrAt },
           carrierCode: airlineIata,
@@ -138,9 +143,15 @@ export function flightsFromServerModel(model, carrier) {
 
       const first = segments[0]
       const last = segments[segments.length - 1]
+      const itinDur = durIso(first._depGmt || first.departure.at, last._arrGmt || last.arrival.at)
+      segments.forEach((s) => {
+        delete s._depGmt
+        delete s._arrGmt
+      })
+
       out.push({
         id: `tti_${carrier.code}_${first.flightNumber}_${first.departure.at}`,
-        price: { total: toUsd(total), currency: "USD" },
+        price: { total: sdgTotal(total), currency: "SDG" },
         numberOfBookableSeats: seats,
         airlineLogo: KIWI_LOGO(first.carrierCode),
         cabinClass: cabin,
@@ -150,15 +161,7 @@ export function flightsFromServerModel(model, carrier) {
         emissionsKg: null,
         source: "tti",
         airline: carrier.name,
-        itineraries: [
-          {
-            duration: durIso(
-              segs[0].DepartureDate?.DateTimeGMT || first.departure.at,
-              segs[segs.length - 1].ArrivalDate?.DateTimeGMT || last.arrival.at,
-            ),
-            segments,
-          },
-        ],
+        itineraries: [{ duration: itinDur, segments }],
       })
     }
   }
