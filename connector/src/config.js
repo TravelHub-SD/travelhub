@@ -13,10 +13,17 @@ function num(v, def) {
 
 let carriers = []
 try {
-  carriers = JSON.parse(process.env.TTI_CARRIERS || "[]")
+  // تسامح مع أخطاء لصق شائعة: مسافات، أو تكرار اسم المتغيّر داخل القيمة
+  // (مثل TTI_CARRIERS=TTI_CARRIERS=[...])، أو أقواس اقتباس محيطة.
+  let raw = (process.env.TTI_CARRIERS || "[]").trim()
+  raw = raw.replace(/^\s*TTI_CARRIERS\s*=\s*/i, "").trim()
+  if ((raw.startsWith('"') && raw.endsWith('"')) || (raw.startsWith("'") && raw.endsWith("'"))) {
+    raw = raw.slice(1, -1).trim()
+  }
+  carriers = JSON.parse(raw)
   if (!Array.isArray(carriers)) carriers = []
-} catch {
-  console.error("[config] TTI_CARRIERS ليست JSON صحيحة — سيتم تجاهلها")
+} catch (e) {
+  console.error("[config] TTI_CARRIERS ليست JSON صحيحة — سيتم تجاهلها:", e.message)
   carriers = []
 }
 
