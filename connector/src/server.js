@@ -5,7 +5,7 @@
 import express from "express"
 import { config } from "./config.js"
 import { cacheGet, cacheSet } from "./cache.js"
-import { searchCarrier } from "./tti.js"
+import { searchCarrier, debugCarrier } from "./tti.js"
 import { mockCarrierFlights } from "./mock.js"
 import { shutdownBrowser } from "./browser.js"
 
@@ -74,6 +74,24 @@ app.post("/search", async (req, res) => {
 app.get("/search", async (req, res) => {
   const { status, body } = await doSearch(req.query || {})
   res.status(status).json(body)
+})
+
+// نقطة تشخيص مؤقتة:
+//   /debug?carrier=sudanair&key=XXX          → حقائق JSON عن الصفحة بعد الدخول
+//   /debug?carrier=sudanair&shot=1&key=XXX   → صورة لِما يراه المتصفح
+app.get("/debug", async (req, res) => {
+  const code = String(req.query.carrier || "").toLowerCase()
+  const carrier =
+    config.carriers.find((c) => (c.code || "").toLowerCase() === code) || config.carriers[0]
+  if (!carrier) return res.status(400).json({ error: "no carriers configured" })
+  try {
+    const wantShot = req.query.shot === "1"
+    const { facts, screenshot } = await debugCarrier(carrier, { screenshot: wantShot })
+    if (wantShot && screenshot) return res.set("Content-Type", "image/png").send(screenshot)
+    res.json({ carrier: carrier.name, ...facts })
+  } catch (e) {
+    res.status(500).json({ carrier: carrier.name, error: e?.message || String(e) })
+  }
 })
 
 // 0.0.0.0 مطلوب على منصّات الحاويات (Railway) لتصل الطلبات الخارجية.

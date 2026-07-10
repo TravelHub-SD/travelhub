@@ -123,6 +123,36 @@ async function readResults(page, carrier) {
   return flightsFromServerModel(model, carrier)
 }
 
+// تشخيص: يسجّل الدخول، يفتح البحث، ويرجّع حقائق عن الصفحة (+ صورة اختيارية)
+// لمعرفة سبب فشل ظهور نموذج البحث. يُزال بعد الضبط.
+export async function debugCarrier(carrier, { screenshot = false } = {}) {
+  const { page } = await getLoggedInPage(carrier, login)
+  try {
+    const afterLoginUrl = page.url()
+    await page.click(SELECTORS.search.openPanel).catch(() => {})
+    await page.waitForTimeout(6000) // امنح mainFrame وقتاً لتحميل محرّك الحجز
+    const frame = page.frame({ name: "mainFrame" })
+    const facts = {
+      afterLoginUrl,
+      mainFrameUrl: frame ? frame.url() : null,
+      dockOriginOptions: await page.$$eval("#id_depart option", (o) => o.length).catch(() => -1),
+      hasDockFrmbook: (await page.$('form[name="frmbook"]')) ? true : false,
+      mainFrameSelects: frame ? await frame.$$eval("select", (s) => s.length).catch(() => -1) : null,
+      mainFrameForms: frame
+        ? await frame.$$eval("form", (fs) => fs.map((f) => f.getAttribute("action") || f.name || "?")).catch(() => null)
+        : null,
+      mainFrameHtmlLen: frame ? (await frame.content().catch(() => "")).length : 0,
+    }
+    if (screenshot) {
+      const buf = await page.screenshot({ fullPage: false })
+      return { facts, screenshot: buf }
+    }
+    return { facts }
+  } finally {
+    await page.close().catch(() => {})
+  }
+}
+
 // البحث عبر خط واحد → مصفوفة رحلات مطبّعة. يبتلع الأخطاء ويرجّع [] مع تسجيلها.
 export async function searchCarrier(carrier, params) {
   let page
