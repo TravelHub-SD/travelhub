@@ -56,8 +56,8 @@ import { getAirlineName, getAirlineLogo } from "@/lib/airlines"
 const EXCHANGE_RATE = 3650 // سعر الدولار مقابل الجنيه السوداني
 const PHONE_NUMBER = "249114610204"
 const WHATSAPP_NUMBER = "249960278594"
-// TODO: استبدل هذا برابط قروب الواتساب الخاص بالعروض (chat.whatsapp.com/...)
-const WHATSAPP_GROUP_LINK = "https://chat.whatsapp.com/XXXXXXXXXXXXXXXXX"
+// رابط قروب الواتساب الخاص بالعروض
+const WHATSAPP_GROUP_LINK = "https://chat.whatsapp.com/GGxhWOBUsXgJr98kbB1DmD"
 const EMAIL = "travelhub.sd@gmail.com"
 
 const formatPrice = (usdPrice: string) => {
