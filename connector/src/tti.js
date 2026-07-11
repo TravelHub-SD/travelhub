@@ -134,57 +134,6 @@ async function readResults(page, carrier) {
   return flightsFromServerModel(model, carrier)
 }
 
-// تشخيص: يسجّل الدخول، يفتح البحث، ويرجّع حقائق عن الصفحة (+ صورة اختيارية)
-// لمعرفة سبب فشل ظهور نموذج البحث. يُزال بعد الضبط.
-export async function debugCarrier(carrier, { screenshot = false } = {}) {
-  const { page } = await getLoggedInPage(carrier, login)
-  try {
-    const afterLoginUrl = page.url()
-    // افتح محرّك الحجز (Book a flight) وامنحه وقتاً للتحميل داخل mainFrame
-    await page.click(SELECTORS.search.openPanel).catch(() => {})
-    await page.waitForTimeout(8000)
-
-    const frame = page.frame({ name: "mainFrame" })
-    const dump = frame
-      ? await frame
-          .evaluate(() => {
-            const q = (sel, root = document) => Array.from(root.querySelectorAll(sel))
-            const txt = (el) => (el.textContent || "").replace(/\s+/g, " ").trim()
-            const toggles = q(".dropdown-toggle").map((t) => txt(t).slice(0, 25))
-            const menus = q(".dropdown-menu").slice(0, 8).map((m) => ({
-              n: m.querySelectorAll("li,a").length,
-              items: q("li a, li", m).map((a) => txt(a)).filter(Boolean).slice(0, 5),
-            }))
-            const firstItem = document.querySelector(".dropdown-menu li a, .dropdown-menu a, .dropdown-menu li")
-            return {
-              url: location.href,
-              title: document.title,
-              toggles,
-              menus,
-              firstItemHtml: firstItem ? firstItem.outerHTML.slice(0, 400) : null,
-              hasDateInput: !!document.querySelector("#CalendarID0"),
-              hasSearchBtn: !!q("button, a, input").find((b) => /search flights/i.test(b.textContent || b.value || "")),
-            }
-          })
-          .catch((e) => ({ error: String(e) }))
-      : null
-
-    const facts = {
-      afterLoginUrl,
-      dockOriginOptions: await page.$$eval("#id_depart option", (o) => o.length).catch(() => -1),
-      mainFrameUrl: frame ? frame.url() : null,
-      mainFrame: dump,
-    }
-    if (screenshot) {
-      const buf = await page.screenshot({ fullPage: false })
-      return { facts, screenshot: buf }
-    }
-    return { facts }
-  } finally {
-    await page.close().catch(() => {})
-  }
-}
-
 // البحث عبر خط واحد → مصفوفة رحلات مطبّعة. يبتلع الأخطاء ويرجّع [] مع تسجيلها.
 export async function searchCarrier(carrier, params) {
   let page
