@@ -2,11 +2,13 @@
 
 import type React from "react"
 import { useEffect, useRef, useState } from "react"
+import { createPortal } from "react-dom"
 import {
   Phone,
   Mail,
   Plane,
   Hotel,
+  Home as HomeIcon,
   FileText,
   Search,
   Calendar,
@@ -148,6 +150,7 @@ export default function Home() {
     baggageOnly: boolean
     refundableOnly: boolean
   }>({ airlines: [], stops: "all", maxPrice: null, baggageOnly: false, refundableOnly: false })
+  const [filtersOpen, setFiltersOpen] = useState(false)
   const resultsRef = useRef<HTMLDivElement>(null)
 
   // رسائل متبدّلة أثناء البحث (نافذة الانتظار)
@@ -304,7 +307,7 @@ export default function Home() {
   ]
 
   return (
-    <div className="min-h-screen bg-slate-50 text-slate-800" dir={language === "ar" ? "rtl" : "ltr"}>
+    <div className="min-h-screen bg-slate-50 text-slate-800 pb-16 lg:pb-0 overflow-x-clip" dir={language === "ar" ? "rtl" : "ltr"}>
       {/* ─── Header ─── */}
       <header className="sticky top-0 z-50 bg-white/95 backdrop-blur-md border-b border-slate-100 shadow-sm">
         <div className="container mx-auto px-4 h-[68px] flex justify-between items-center gap-4">
@@ -705,10 +708,105 @@ export default function Home() {
                 airlines: f.airlines.includes(code) ? f.airlines.filter((c) => c !== code) : [...f.airlines, code],
               }))
 
+            const activeFilterCount =
+              (filters.stops !== "all" ? 1 : 0) +
+              (filters.baggageOnly ? 1 : 0) +
+              (filters.refundableOnly ? 1 : 0) +
+              filters.airlines.length +
+              (filters.maxPrice != null && filters.maxPrice < priceMax ? 1 : 0)
+
+            // محتوى الفلاتر — يُستخدم في الشريط الجانبي (سطح المكتب) والنافذة السفلية (الموبايل)
+            const filtersInner = (
+              <>
+                {/* Price */}
+                <div className="space-y-2">
+                  <label className="text-sm font-semibold text-slate-700">أقصى سعر</label>
+                  <input
+                    type="range"
+                    min={priceMin}
+                    max={priceMax}
+                    value={effectiveMax}
+                    onChange={(e) => setFilters((f) => ({ ...f, maxPrice: Number(e.target.value) }))}
+                    className="w-full accent-[#ff8c42]"
+                  />
+                  <p className="text-xs text-slate-500">
+                    حتى <span className="font-bold text-[#ff8c42]">{fmtSDG(String(effectiveMax))} ج.س</span>
+                  </p>
+                </div>
+
+                {/* Stops */}
+                <div className="space-y-2">
+                  <label className="text-sm font-semibold text-slate-700">التوقفات</label>
+                  <div className="grid grid-cols-2 gap-2">
+                    {stopOptions.map((s) => (
+                      <button
+                        key={s.key}
+                        onClick={() => setFilters((f) => ({ ...f, stops: s.key }))}
+                        className={`text-xs font-medium py-2.5 rounded-lg border transition ${
+                          filters.stops === s.key
+                            ? "border-[#ff8c42] bg-[#ff8c42]/10 text-[#ff7a2e]"
+                            : "border-slate-200 text-slate-500 hover:border-slate-300"
+                        }`}
+                      >
+                        {s.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Toggles */}
+                <div className="space-y-3">
+                  {[
+                    { key: "baggageOnly" as const, label: "أمتعة مسجّلة مشمولة", icon: Luggage },
+                    { key: "refundableOnly" as const, label: "قابل للاسترجاع", icon: RefreshCw },
+                  ].map((t) => (
+                    <button
+                      key={t.key}
+                      onClick={() => setFilters((f) => ({ ...f, [t.key]: !f[t.key] }))}
+                      className="w-full flex items-center gap-2.5 text-sm text-slate-600"
+                    >
+                      <span
+                        className={`w-5 h-5 rounded-md border flex items-center justify-center transition ${
+                          filters[t.key] ? "bg-[#ff8c42] border-[#ff8c42]" : "border-slate-300"
+                        }`}
+                      >
+                        {filters[t.key] && <Check className="w-3.5 h-3.5 text-white" />}
+                      </span>
+                      <t.icon className="w-4 h-4 text-slate-400" />
+                      {t.label}
+                    </button>
+                  ))}
+                </div>
+
+                {/* Airlines */}
+                <div className="space-y-2">
+                  <label className="text-sm font-semibold text-slate-700">شركات الطيران</label>
+                  <div className="space-y-2.5 max-h-56 overflow-y-auto pl-1">
+                    {allAirlines.map((code) => (
+                      <button
+                        key={code}
+                        onClick={() => toggleAirline(code)}
+                        className="w-full flex items-center gap-2.5 text-sm text-slate-600"
+                      >
+                        <span
+                          className={`w-5 h-5 rounded-md border flex items-center justify-center transition shrink-0 ${
+                            filters.airlines.includes(code) ? "bg-[#ff8c42] border-[#ff8c42]" : "border-slate-300"
+                          }`}
+                        >
+                          {filters.airlines.includes(code) && <Check className="w-3.5 h-3.5 text-white" />}
+                        </span>
+                        <span className="truncate text-right flex-1">{getAirlineName(code, language)}</span>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              </>
+            )
+
             return (
               <div className="grid lg:grid-cols-[260px_1fr] gap-6 items-start">
-                {/* Filters sidebar */}
-                <aside className="bg-white rounded-2xl border border-slate-100 shadow-card p-5 space-y-6 lg:sticky lg:top-20">
+                {/* Filters sidebar (سطح المكتب) */}
+                <aside className="hidden lg:block bg-white rounded-2xl border border-slate-100 shadow-card p-5 space-y-6 lg:sticky lg:top-20">
                   <div className="flex items-center justify-between">
                     <h4 className="font-bold text-[#1e3a5f] flex items-center gap-2">
                       <SlidersHorizontal className="w-4 h-4 text-[#ff8c42]" /> تصفية النتائج
@@ -717,106 +815,69 @@ export default function Home() {
                       <RotateCcw className="w-3 h-3" /> مسح
                     </button>
                   </div>
-
-                  {/* Price */}
-                  <div className="space-y-2">
-                    <label className="text-sm font-semibold text-slate-700">أقصى سعر</label>
-                    <input
-                      type="range"
-                      min={priceMin}
-                      max={priceMax}
-                      value={effectiveMax}
-                      onChange={(e) => setFilters((f) => ({ ...f, maxPrice: Number(e.target.value) }))}
-                      className="w-full accent-[#ff8c42]"
-                    />
-                    <p className="text-xs text-slate-500">
-                      حتى <span className="font-bold text-[#ff8c42]">{fmtSDG(String(effectiveMax))} ج.س</span>
-                    </p>
-                  </div>
-
-                  {/* Stops */}
-                  <div className="space-y-2">
-                    <label className="text-sm font-semibold text-slate-700">التوقفات</label>
-                    <div className="grid grid-cols-2 gap-2">
-                      {stopOptions.map((s) => (
-                        <button
-                          key={s.key}
-                          onClick={() => setFilters((f) => ({ ...f, stops: s.key }))}
-                          className={`text-xs font-medium py-2 rounded-lg border transition ${
-                            filters.stops === s.key
-                              ? "border-[#ff8c42] bg-[#ff8c42]/10 text-[#ff7a2e]"
-                              : "border-slate-200 text-slate-500 hover:border-slate-300"
-                          }`}
-                        >
-                          {s.label}
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-
-                  {/* Toggles */}
-                  <div className="space-y-2">
-                    {[
-                      { key: "baggageOnly" as const, label: "أمتعة مسجّلة مشمولة", icon: Luggage },
-                      { key: "refundableOnly" as const, label: "قابل للاسترجاع", icon: RefreshCw },
-                    ].map((t) => (
-                      <button
-                        key={t.key}
-                        onClick={() => setFilters((f) => ({ ...f, [t.key]: !f[t.key] }))}
-                        className="w-full flex items-center gap-2.5 text-sm text-slate-600"
-                      >
-                        <span
-                          className={`w-5 h-5 rounded-md border flex items-center justify-center transition ${
-                            filters[t.key] ? "bg-[#ff8c42] border-[#ff8c42]" : "border-slate-300"
-                          }`}
-                        >
-                          {filters[t.key] && <Check className="w-3.5 h-3.5 text-white" />}
-                        </span>
-                        <t.icon className="w-4 h-4 text-slate-400" />
-                        {t.label}
-                      </button>
-                    ))}
-                  </div>
-
-                  {/* Airlines */}
-                  <div className="space-y-2">
-                    <label className="text-sm font-semibold text-slate-700">شركات الطيران</label>
-                    <div className="space-y-1.5 max-h-56 overflow-y-auto pl-1">
-                      {allAirlines.map((code) => (
-                        <button
-                          key={code}
-                          onClick={() => toggleAirline(code)}
-                          className="w-full flex items-center gap-2.5 text-sm text-slate-600"
-                        >
-                          <span
-                            className={`w-5 h-5 rounded-md border flex items-center justify-center transition shrink-0 ${
-                              filters.airlines.includes(code) ? "bg-[#ff8c42] border-[#ff8c42]" : "border-slate-300"
-                            }`}
-                          >
-                            {filters.airlines.includes(code) && <Check className="w-3.5 h-3.5 text-white" />}
-                          </span>
-                          <span className="truncate text-right flex-1">{getAirlineName(code, language)}</span>
-                        </button>
-                      ))}
-                    </div>
-                  </div>
+                  {filtersInner}
                 </aside>
+
+                {/* نافذة الفلاتر السفلية (الموبايل) — عبر Portal لتغطية الشاشة كاملة */}
+                {filtersOpen &&
+                  typeof document !== "undefined" &&
+                  createPortal(
+                    <div className="lg:hidden fixed inset-0 z-[150]" dir={language === "ar" ? "rtl" : "ltr"}>
+                      <div className="absolute inset-0 bg-black/40" onClick={() => setFiltersOpen(false)} />
+                      <div className="absolute bottom-0 inset-x-0 bg-white rounded-t-3xl max-h-[85vh] flex flex-col animate-slide-up">
+                        <div className="flex items-center justify-between p-4 border-b border-slate-100">
+                          <h4 className="font-bold text-[#1e3a5f] flex items-center gap-2">
+                            <SlidersHorizontal className="w-4 h-4 text-[#ff8c42]" /> تصفية النتائج
+                          </h4>
+                          <button onClick={resetFilters} className="text-xs text-[#ff8c42] flex items-center gap-1">
+                            <RotateCcw className="w-3 h-3" /> مسح الكل
+                          </button>
+                        </div>
+                        <div className="overflow-y-auto p-5 space-y-6 flex-1">{filtersInner}</div>
+                        <div className="p-4 border-t border-slate-100">
+                          <Button
+                            onClick={() => setFiltersOpen(false)}
+                            className="w-full h-12 rounded-xl bg-[#ff8c42] hover:bg-[#ff7a2e] text-white font-bold"
+                          >
+                            عرض {sorted.length} رحلة
+                          </Button>
+                        </div>
+                      </div>
+                    </div>,
+                    document.body,
+                  )}
 
                 {/* Results list */}
                 <div className="space-y-4">
-                  {/* Sort tabs */}
-                  <div className="inline-flex gap-1 bg-slate-100 p-1 rounded-full">
-                    {sortTabs.map((t) => (
-                      <button
-                        key={t.key}
-                        onClick={() => setSortBy(t.key)}
-                        className={`flex items-center gap-1.5 px-4 py-2 text-sm font-semibold rounded-full transition-all ${
-                          sortBy === t.key ? "bg-white text-[#1e3a5f] shadow-sm" : "text-slate-500 hover:text-slate-700"
-                        }`}
-                      >
-                        <t.icon className="w-4 h-4" /> {t.label}
-                      </button>
-                    ))}
+                  {/* شريط الفرز + زر الفلاتر (موبايل) */}
+                  <div className="flex items-center gap-2 sticky top-[120px] z-20 py-2 bg-slate-50/95 backdrop-blur-sm rounded-full lg:static lg:py-0 lg:bg-transparent">
+                    <div className="flex-1 overflow-x-auto no-scrollbar">
+                      <div className="inline-flex gap-1 bg-slate-100 p-1 rounded-full">
+                        {sortTabs.map((t) => (
+                          <button
+                            key={t.key}
+                            onClick={() => setSortBy(t.key)}
+                            className={`flex items-center gap-1.5 px-3.5 py-2 text-xs md:text-sm font-semibold rounded-full transition-all whitespace-nowrap ${
+                              sortBy === t.key ? "bg-white text-[#1e3a5f] shadow-sm" : "text-slate-500 hover:text-slate-700"
+                            }`}
+                          >
+                            <t.icon className="w-4 h-4" /> {t.label}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                    <button
+                      onClick={() => setFiltersOpen(true)}
+                      className="lg:hidden shrink-0 flex items-center gap-1.5 h-10 px-3.5 rounded-full bg-white border border-slate-200 text-sm font-semibold text-[#1e3a5f] shadow-sm"
+                    >
+                      <SlidersHorizontal className="w-4 h-4 text-[#ff8c42]" />
+                      فلترة
+                      {activeFilterCount > 0 && (
+                        <span className="w-5 h-5 rounded-full bg-[#ff8c42] text-white text-[11px] font-bold flex items-center justify-center">
+                          {activeFilterCount}
+                        </span>
+                      )}
+                    </button>
                   </div>
 
                   {sorted.length === 0 && (
@@ -1491,10 +1552,49 @@ export default function Home() {
       <button
         onClick={scrollToTop}
         aria-label="العودة للأعلى"
-        className="fixed bottom-6 left-6 z-50 w-12 h-12 rounded-full bg-[#ff8c42] hover:bg-[#ff7a2e] text-white flex items-center justify-center shadow-lg shadow-orange-500/30 transition hover:-translate-y-0.5"
+        className="fixed bottom-24 lg:bottom-6 left-4 lg:left-6 z-50 w-11 h-11 lg:w-12 lg:h-12 rounded-full bg-[#ff8c42] hover:bg-[#ff7a2e] text-white flex items-center justify-center shadow-lg shadow-orange-500/30 transition hover:-translate-y-0.5"
       >
         <ArrowUp className="w-5 h-5" />
       </button>
+
+      {/* ─── Bottom navigation (تطبيقي — للموبايل فقط) ─── */}
+      <nav className="lg:hidden fixed bottom-0 inset-x-0 z-[120] bg-white/95 backdrop-blur-md border-t border-slate-100 shadow-[0_-4px_20px_rgba(0,0,0,0.06)] pb-[env(safe-area-inset-bottom)]">
+        <div className="grid grid-cols-5 items-end h-16">
+          {[
+            { icon: HomeIcon, label: "الرئيسية", onClick: () => scrollToTop() },
+            { icon: MapPin, label: "الوجهات", onClick: () => document.getElementById("destinations")?.scrollIntoView({ behavior: "smooth" }) },
+          ].map((item) => (
+            <button key={item.label} onClick={item.onClick} className="flex flex-col items-center justify-center gap-1 h-full text-slate-500 active:text-[#ff8c42]">
+              <item.icon className="w-5 h-5" />
+              <span className="text-[10px] font-medium">{item.label}</span>
+            </button>
+          ))}
+
+          {/* زر البحث المركزي البارز */}
+          <div className="flex justify-center">
+            <button
+              onClick={() => {
+                setActiveTab("flights")
+                document.getElementById("home")?.scrollIntoView({ behavior: "smooth" })
+              }}
+              className="-mt-6 w-14 h-14 rounded-full bg-[#ff8c42] text-white flex flex-col items-center justify-center shadow-lg shadow-orange-500/40 active:scale-95 transition"
+              aria-label="ابحث"
+            >
+              <Search className="w-6 h-6" />
+            </button>
+          </div>
+
+          {[
+            { icon: Percent, label: "العروض", onClick: () => document.getElementById("offers")?.scrollIntoView({ behavior: "smooth" }) },
+            { icon: MessageCircle, label: "واتساب", onClick: () => window.open(`https://wa.me/${WHATSAPP_NUMBER}`, "_blank") },
+          ].map((item) => (
+            <button key={item.label} onClick={item.onClick} className="flex flex-col items-center justify-center gap-1 h-full text-slate-500 active:text-[#ff8c42]">
+              <item.icon className={`w-5 h-5 ${item.label === "واتساب" ? "text-[#25D366]" : ""}`} />
+              <span className="text-[10px] font-medium">{item.label}</span>
+            </button>
+          ))}
+        </div>
+      </nav>
     </div>
   )
 }
