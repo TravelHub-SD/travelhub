@@ -1,7 +1,7 @@
 "use client"
 
 import type React from "react"
-import { useRef, useState } from "react"
+import { useEffect, useRef, useState } from "react"
 import {
   Phone,
   Mail,
@@ -47,6 +47,8 @@ import { Card, CardContent } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { AirportSelect } from "@/components/airport-select"
+import { DatePicker } from "@/components/date-picker"
+import { PassengerSelect } from "@/components/passenger-select"
 import { getAirlineName, getAirlineLogo } from "@/lib/airlines"
 
 const EXCHANGE_RATE = 3650 // سعر الدولار مقابل الجنيه السوداني
@@ -148,10 +150,29 @@ export default function Home() {
   }>({ airlines: [], stops: "all", maxPrice: null, baggageOnly: false, refundableOnly: false })
   const resultsRef = useRef<HTMLDivElement>(null)
 
+  // رسائل متبدّلة أثناء البحث (نافذة الانتظار)
+  useEffect(() => {
+    if (!isLoading) return
+    const msgs = [
+      "نتصل بأنظمة بدر وتاركو وسودانير...",
+      "نقارن الأسعار بالجنيه السوداني...",
+      "نجمع أفضل الرحلات المتاحة...",
+      "لحظات ونعرض لك النتائج...",
+    ]
+    let i = 0
+    setLoadingMsg(msgs[0])
+    const t = setInterval(() => {
+      i = (i + 1) % msgs.length
+      setLoadingMsg(msgs[i])
+    }, 4000)
+    return () => clearInterval(t)
+  }, [isLoading])
+
   const resetFilters = () =>
     setFilters({ airlines: [], stops: "all", maxPrice: null, baggageOnly: false, refundableOnly: false })
 
-  const [flightForm, setFlightForm] = useState({ origin: "", destination: "", departureDate: "", returnDate: "", adults: "1" })
+  const [flightForm, setFlightForm] = useState({ origin: "", destination: "", departureDate: "", returnDate: "", adults: "1", cabin: "economy" })
+  const [loadingMsg, setLoadingMsg] = useState("")
   const [hotelForm, setHotelForm] = useState({ city: "", checkIn: "", checkOut: "", adults: "1" })
 
   const handleFlightSearch = async (e: React.FormEvent) => {
@@ -384,53 +405,33 @@ export default function Home() {
                         placeholder="ابحث عن مدينة أو مطار"
                         label="إلى (الوجهة)"
                       />
-                      <div className="space-y-2">
-                        <label className="text-sm font-medium text-slate-700 flex items-center gap-2">
-                          <Calendar className="w-4 h-4 text-[#ff8c42]" />
-                          تاريخ المغادرة
-                        </label>
-                        <Input
-                          type="date"
-                          className="h-12 rounded-xl border-slate-200"
-                          value={flightForm.departureDate}
-                          onChange={(e) => setFlightForm({ ...flightForm, departureDate: e.target.value })}
-                          required
-                        />
-                      </div>
-                      <div className="space-y-2">
-                        <label className="text-sm font-medium text-slate-700 flex items-center gap-2">
-                          <Calendar className="w-4 h-4 text-[#ff8c42]" />
-                          تاريخ العودة
-                        </label>
-                        <Input
-                          type="date"
-                          className="h-12 rounded-xl border-slate-200 disabled:opacity-50"
-                          value={flightForm.returnDate}
-                          onChange={(e) => setFlightForm({ ...flightForm, returnDate: e.target.value })}
-                          disabled={tripType === "one-way"}
-                        />
-                      </div>
+                      <DatePicker
+                        label="تاريخ المغادرة"
+                        value={flightForm.departureDate}
+                        onChange={(v) => setFlightForm({ ...flightForm, departureDate: v })}
+                      />
+                      <DatePicker
+                        label="تاريخ العودة"
+                        value={flightForm.returnDate}
+                        onChange={(v) => setFlightForm({ ...flightForm, returnDate: v })}
+                        disabled={tripType === "one-way"}
+                        minDate={flightForm.departureDate || undefined}
+                        placeholder={tripType === "one-way" ? "ذهاب فقط" : "اختر التاريخ"}
+                      />
                     </div>
                     <div className="grid md:grid-cols-3 gap-4 mt-4">
-                      <div className="space-y-2">
-                        <label className="text-sm font-medium text-slate-700 flex items-center gap-2">
-                          <Users className="w-4 h-4 text-[#ff8c42]" />
-                          عدد المسافرين
-                        </label>
-                        <Input
-                          type="number"
-                          min="1"
-                          max="9"
-                          className="h-12 rounded-xl border-slate-200"
-                          value={flightForm.adults}
-                          onChange={(e) => setFlightForm({ ...flightForm, adults: e.target.value })}
-                        />
-                      </div>
+                      <PassengerSelect
+                        label="المسافرون والدرجة"
+                        adults={flightForm.adults}
+                        onAdultsChange={(n) => setFlightForm({ ...flightForm, adults: n })}
+                        cabin={flightForm.cabin}
+                        onCabinChange={(c) => setFlightForm({ ...flightForm, cabin: c })}
+                      />
                       <div className="md:col-span-2 flex items-end">
                         <Button
                           type="submit"
                           className="w-full bg-[#ff8c42] hover:bg-[#ff7a2e] text-white h-12 rounded-xl text-base font-bold shadow-lg shadow-orange-500/25"
-                          disabled={isLoading}
+                          disabled={isLoading || !flightForm.origin || !flightForm.destination || !flightForm.departureDate}
                         >
                           {isLoading ? "جاري البحث..." : (<><Search className="ml-2 w-5 h-5" /> ابحث عن رحلات</>)}
                         </Button>
@@ -530,22 +531,43 @@ export default function Home() {
         </div>
       </section>
 
-      {/* ─── Loading (نافذة منبثقة) ─── */}
+      {/* ─── Loading (نافذة منبثقة على طراز حديث) ─── */}
       {isLoading && (
         <div
-          className="fixed inset-0 z-[200] flex items-center justify-center bg-[#0e2038]/70 backdrop-blur-sm p-4"
+          className="fixed inset-0 z-[200] flex items-center justify-center bg-[#0e2038]/75 backdrop-blur-sm p-4"
           dir={language === "ar" ? "rtl" : "ltr"}
         >
-          <div className="bg-white rounded-3xl shadow-float p-8 md:p-10 text-center max-w-sm w-full animate-rise">
-            <div className="relative w-24 h-24 mx-auto mb-6">
-              <div className="absolute inset-0 rounded-full border-4 border-[#ff8c42]/20" />
-              <div className="absolute inset-0 rounded-full border-4 border-transparent border-t-[#ff8c42] animate-spin" />
-              <div className="absolute inset-0 flex items-center justify-center">
-                <Plane className="w-9 h-9 text-[#ff8c42] -rotate-45 animate-pulse" />
-              </div>
+          <div className="bg-white rounded-3xl shadow-float p-8 md:p-10 text-center max-w-md w-full animate-rise">
+            {/* المسار */}
+            <div className="flex items-center justify-center gap-3 text-2xl md:text-3xl font-extrabold text-[#1e3a5f]">
+              <span>{flightForm.origin || "—"}</span>
+              <Plane className="w-6 h-6 text-[#ff8c42] -rotate-45" />
+              <span>{flightForm.destination || "—"}</span>
             </div>
-            <h3 className="text-2xl font-bold text-[#1e3a5f] mb-2">جاري البحث...</h3>
-            <p className="text-slate-500">نبحث لك عن أفضل رحلات الخطوط السودانية</p>
+            <p className="text-slate-500 text-sm mt-2">
+              {flightForm.departureDate && <span dir="ltr">{flightForm.departureDate}</span>}
+              {flightForm.departureDate && " · "}
+              {flightForm.adults} مسافر
+            </p>
+
+            {/* نقاط متحرّكة */}
+            <div className="flex items-center justify-center gap-2 my-6">
+              <span className="w-2.5 h-2.5 rounded-full bg-[#ff8c42] animate-bounce" style={{ animationDelay: "0ms" }} />
+              <span className="w-2.5 h-2.5 rounded-full bg-[#1e3a5f] animate-bounce" style={{ animationDelay: "150ms" }} />
+              <span className="w-2.5 h-2.5 rounded-full bg-[#25D366] animate-bounce" style={{ animationDelay: "300ms" }} />
+            </div>
+
+            <p className="font-bold text-[#1e3a5f] flex items-center justify-center gap-2">
+              <Plane className="w-4 h-4 text-[#ff8c42] -rotate-45" />
+              نبحث لك عن أفضل الرحلات...
+            </p>
+            <p className="text-slate-400 text-sm mt-1 min-h-[20px]">{loadingMsg}</p>
+
+            {/* شريط التقدّم */}
+            <div className="mt-5 h-1.5 bg-slate-100 rounded-full overflow-hidden">
+              <div className="h-full bg-gradient-to-r from-[#ff8c42] to-[#ff7a2e] rounded-full animate-progress" />
+            </div>
+
             <div className="flex items-center justify-center gap-2 mt-5">
               {["سودانير", "بدر", "تاركو"].map((c) => (
                 <span key={c} className="text-xs font-medium px-2.5 py-1 rounded-full bg-slate-100 text-slate-500">
