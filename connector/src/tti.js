@@ -134,6 +134,39 @@ async function readResults(page, carrier) {
   return flightsFromServerModel(model, carrier)
 }
 
+// يقرأ مطارات النظام لخط معيّن من قوائم محرّك الحجز (المغادرة + الوجهة).
+// يُرجّع خريطة { CODE: label }.
+export async function listCarrierAirports(carrier) {
+  let page
+  try {
+    const res = await getLoggedInPage(carrier, login)
+    page = res.page
+    const frame = await getBookingFrame(page)
+    await frame
+      .waitForFunction(() => document.querySelector(".dropdown-menu a strong") != null, { timeout: 15000 })
+      .catch(() => {})
+    return await frame.evaluate(() => {
+      const out = {}
+      const menus = document.querySelectorAll(".dropdown-menu")
+      ;[0, 1].forEach((i) => {
+        const menu = menus[i]
+        if (!menu) return
+        menu.querySelectorAll("a").forEach((a) => {
+          const code = a.querySelector("strong")?.textContent?.trim()
+          if (code && /^[A-Z]{3}$/.test(code)) {
+            out[code] = (a.textContent || "").replace(code, "").trim()
+          }
+        })
+      })
+      return out
+    })
+  } catch {
+    return {}
+  } finally {
+    if (page) await page.close().catch(() => {})
+  }
+}
+
 // البحث عبر خط واحد → مصفوفة رحلات مطبّعة. يبتلع الأخطاء ويرجّع [] مع تسجيلها.
 export async function searchCarrier(carrier, params) {
   let page

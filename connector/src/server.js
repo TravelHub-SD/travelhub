@@ -5,7 +5,7 @@
 import express from "express"
 import { config } from "./config.js"
 import { cacheGet, cacheSet } from "./cache.js"
-import { searchCarrier } from "./tti.js"
+import { searchCarrier, listCarrierAirports } from "./tti.js"
 import { mockCarrierFlights } from "./mock.js"
 import { shutdownBrowser } from "./browser.js"
 
@@ -25,6 +25,50 @@ app.use((req, res, next) => {
 
 app.get("/health", (_req, res) => {
   res.json({ ok: true, carriers: config.carriers.map((c) => c.name), mock: config.mock })
+})
+
+// ─── مطارات النظام (للقوائم المنسدلة في الموقع) ───────────────────────────────
+// قائمة احتياطية سودانية تظهر فوراً ريثما تُقرأ القائمة الفعلية من النظام.
+const FALLBACK_AIRPORTS = [
+  { code: "KRT", name: "Khartoum" },
+  { code: "PZU", name: "Port Sudan" },
+  { code: "DOG", name: "Dongola" },
+  { code: "UYL", name: "Nyala" },
+  { code: "ELF", name: "El Fasher" },
+  { code: "EBD", name: "El Obeid" },
+  { code: "CAI", name: "Cairo" },
+  { code: "JED", name: "Jeddah" },
+  { code: "DXB", name: "Dubai" },
+  { code: "DOH", name: "Doha" },
+  { code: "IST", name: "Istanbul" },
+  { code: "ADD", name: "Addis Ababa" },
+  { code: "JUB", name: "Juba" },
+]
+
+let airportsCache = null // { t, data }
+let airportsRefreshing = false
+
+async function refreshAirports() {
+  if (airportsRefreshing || config.mock || config.carriers.length === 0) return
+  airportsRefreshing = true
+  try {
+    const merged = {}
+    for (const c of config.carriers) Object.assign(merged, await listCarrierAirports(c))
+    const data = Object.entries(merged)
+      .map(([code, name]) => ({ code, name }))
+      .sort((a, b) => a.name.localeCompare(b.name))
+    if (data.length) airportsCache = { t: Date.now(), data }
+  } catch {
+    /* نُبقي القائمة الاحتياطية */
+  } finally {
+    airportsRefreshing = false
+  }
+}
+
+app.get("/airports", (_req, res) => {
+  const fresh = airportsCache && Date.now() - airportsCache.t < 24 * 60 * 60 * 1000
+  if (!fresh) refreshAirports() // تحديث بالخلفية (لا يعطّل الرد)
+  res.json(airportsCache?.data?.length ? airportsCache.data : FALLBACK_AIRPORTS)
 })
 
 // المنطق المشترك للبحث.
@@ -79,6 +123,8 @@ app.get("/search", async (req, res) => {
 // 0.0.0.0 مطلوب على منصّات الحاويات (Railway) لتصل الطلبات الخارجية.
 const server = app.listen(config.port, "0.0.0.0", () => {
   console.log(`[tti-connector] يعمل على المنفذ ${config.port} — الخطوط: ${config.carriers.map((c) => c.name).join(", ") || "(mock)"}`)
+  // تسخين قائمة المطارات في الخلفية لتكون جاهزة عند أول طلب من الموقع.
+  refreshAirports()
 })
 
 for (const sig of ["SIGINT", "SIGTERM"]) {
