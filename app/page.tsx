@@ -21,6 +21,7 @@ import {
   Star,
   ChevronLeft,
   ChevronDown,
+  ArrowLeftRight,
   Briefcase,
   Zap,
   TrendingDown,
@@ -56,13 +57,14 @@ const EMAIL = "info@travelhub.com"
 const formatPrice = (usdPrice: string) => {
   const price = Number.parseFloat(usdPrice)
   const sdgPrice = Math.round(price * EXCHANGE_RATE)
-  return { usd: price.toFixed(2), sdg: sdgPrice.toLocaleString("ar-SA") }
+  return { usd: price.toFixed(2), sdg: sdgPrice.toLocaleString("en-US") }
 }
 
 // أسعار الرحلات تأتي بالجنيه السوداني مباشرة من الموصّل — بلا تحويل دولار.
-const fmtSDG = (sdg: string) => (Math.round(Number.parseFloat(sdg) || 0)).toLocaleString("ar-SA")
+// نستخدم الأرقام اللاتينية (650,000) لأنها أوضح للقراءة.
+const fmtSDG = (sdg: string) => (Math.round(Number.parseFloat(sdg) || 0)).toLocaleString("en-US")
 
-const sdg = (n: number) => n.toLocaleString("ar-SA")
+const sdg = (n: number) => n.toLocaleString("en-US")
 
 // PT7H15M -> "7 س 15 د"
 const formatDuration = (iso?: string) => {
@@ -528,47 +530,97 @@ export default function Home() {
         </div>
       </section>
 
-      {/* ─── Loading ─── */}
+      {/* ─── Loading (نافذة منبثقة) ─── */}
       {isLoading && (
-        <section className="container mx-auto px-4 py-12">
-          <Card className="border-0 rounded-3xl shadow-card">
-            <CardContent className="p-12 text-center">
-              <div className="relative w-24 h-24 mx-auto mb-6">
-                <div className="absolute inset-0 rounded-full border-4 border-[#ff8c42]/20" />
-                <div className="absolute inset-0 rounded-full border-4 border-transparent border-t-[#ff8c42] animate-spin" />
-                <div className="absolute inset-0 flex items-center justify-center">
-                  <Plane className="w-9 h-9 text-[#ff8c42] -rotate-45" />
-                </div>
+        <div
+          className="fixed inset-0 z-[200] flex items-center justify-center bg-[#0e2038]/70 backdrop-blur-sm p-4"
+          dir={language === "ar" ? "rtl" : "ltr"}
+        >
+          <div className="bg-white rounded-3xl shadow-float p-8 md:p-10 text-center max-w-sm w-full animate-rise">
+            <div className="relative w-24 h-24 mx-auto mb-6">
+              <div className="absolute inset-0 rounded-full border-4 border-[#ff8c42]/20" />
+              <div className="absolute inset-0 rounded-full border-4 border-transparent border-t-[#ff8c42] animate-spin" />
+              <div className="absolute inset-0 flex items-center justify-center">
+                <Plane className="w-9 h-9 text-[#ff8c42] -rotate-45 animate-pulse" />
               </div>
-              <h3 className="text-2xl font-bold text-[#1e3a5f] mb-2">جاري البحث عن أفضل العروض...</h3>
-              <p className="text-slate-500">نقارن الأسعار من مئات شركات الطيران</p>
-            </CardContent>
-          </Card>
-        </section>
+            </div>
+            <h3 className="text-2xl font-bold text-[#1e3a5f] mb-2">جاري البحث...</h3>
+            <p className="text-slate-500">نبحث لك عن أفضل رحلات الخطوط السودانية</p>
+            <div className="flex items-center justify-center gap-2 mt-5">
+              {["سودانير", "بدر", "تاركو"].map((c) => (
+                <span key={c} className="text-xs font-medium px-2.5 py-1 rounded-full bg-slate-100 text-slate-500">
+                  {c}
+                </span>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ─── شريط ملخّص البحث الثابت (يعزّز الهوية) ─── */}
+      {searchResults && (
+        <div className="sticky top-[68px] z-30 bg-white/95 backdrop-blur-md border-b border-slate-100 shadow-sm">
+          <div className="container mx-auto px-4 py-2.5 flex items-center justify-between gap-3">
+            <div className="flex items-center gap-2.5 min-w-0">
+              <div className="w-8 h-8 rounded-lg bg-[#ff8c42]/10 flex items-center justify-center shrink-0">
+                <Plane className="w-4 h-4 text-[#ff8c42] -rotate-45" />
+              </div>
+              {activeTab === "flights" ? (
+                <div className="flex items-center gap-2 flex-wrap text-sm leading-none">
+                  <span className="font-extrabold text-[#1e3a5f]">{flightForm.origin || "—"}</span>
+                  <ArrowLeftRight className="w-4 h-4 text-[#ff8c42] shrink-0" />
+                  <span className="font-extrabold text-[#1e3a5f]">{flightForm.destination || "—"}</span>
+                  {flightForm.departureDate && (
+                    <>
+                      <span className="text-slate-300 hidden sm:inline">•</span>
+                      <span className="text-slate-500 hidden sm:flex items-center gap-1">
+                        <Calendar className="w-3.5 h-3.5" /> <span dir="ltr">{flightForm.departureDate}</span>
+                      </span>
+                    </>
+                  )}
+                  <span className="text-slate-300 hidden md:inline">•</span>
+                  <span className="text-slate-500 hidden md:flex items-center gap-1">
+                    <Users className="w-3.5 h-3.5" /> {flightForm.adults} مسافر
+                  </span>
+                </div>
+              ) : (
+                <div className="flex items-center gap-2 text-sm">
+                  <span className="font-extrabold text-[#1e3a5f]">{hotelForm.city || "—"}</span>
+                  {hotelForm.checkIn && (
+                    <span className="text-slate-500 hidden sm:flex items-center gap-1" dir="ltr">
+                      <Calendar className="w-3.5 h-3.5" /> {hotelForm.checkIn} → {hotelForm.checkOut}
+                    </span>
+                  )}
+                </div>
+              )}
+            </div>
+            <Button
+              size="sm"
+              onClick={() => {
+                setSearchResults(null)
+                scrollToTop()
+              }}
+              className="bg-[#ff8c42] hover:bg-[#ff7a2e] text-white rounded-full shrink-0 h-9"
+            >
+              <Search className="w-4 h-4 ml-1" /> تعديل البحث
+            </Button>
+          </div>
+        </div>
       )}
 
       {/* ─── Results ─── */}
       {searchResults && (
-        <section ref={resultsRef} className="container mx-auto px-4 py-10 scroll-mt-20">
-          <div className="flex items-center justify-between mb-6">
-            <div>
-              <h3 className="text-2xl md:text-3xl font-bold text-[#1e3a5f]">
-                {activeTab === "flights" ? "نتائج الرحلات" : "نتائج الفنادق"}
-              </h3>
-              {searchResults.data && (
-                <p className="text-slate-500 text-sm mt-1">
-                  عثرنا على {searchResults.data.length} {activeTab === "flights" ? "رحلة" : "فندق"}
-                  {searchResults?.meta?.source === "mock" && " (بيانات تجريبية)"}
-                </p>
-              )}
-            </div>
-            <Button
-              variant="outline"
-              onClick={() => setSearchResults(null)}
-              className="text-[#ff8c42] border-[#ff8c42] rounded-full hover:bg-[#ff8c42] hover:text-white"
-            >
-              بحث جديد
-            </Button>
+        <section ref={resultsRef} className="container mx-auto px-4 py-10 scroll-mt-32">
+          <div className="mb-6">
+            <h3 className="text-2xl md:text-3xl font-bold text-[#1e3a5f]">
+              {activeTab === "flights" ? "نتائج الرحلات" : "نتائج الفنادق"}
+            </h3>
+            {searchResults.data && (
+              <p className="text-slate-500 text-sm mt-1">
+                عثرنا على {searchResults.data.length} {activeTab === "flights" ? "رحلة" : "فندق"}
+                {searchResults?.meta?.source === "mock" && " (بيانات تجريبية)"}
+              </p>
+            )}
           </div>
 
           {/* Flights */}
