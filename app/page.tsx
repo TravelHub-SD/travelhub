@@ -56,7 +56,9 @@ import { getAirlineName, getAirlineLogo } from "@/lib/airlines"
 const EXCHANGE_RATE = 3650 // سعر الدولار مقابل الجنيه السوداني
 const PHONE_NUMBER = "249114610204"
 const WHATSAPP_NUMBER = "249960278594"
-const EMAIL = "info@travelhub.com"
+// TODO: استبدل هذا برابط قروب الواتساب الخاص بالعروض (chat.whatsapp.com/...)
+const WHATSAPP_GROUP_LINK = "https://chat.whatsapp.com/XXXXXXXXXXXXXXXXX"
+const EMAIL = "travelhub.sd@gmail.com"
 
 const formatPrice = (usdPrice: string) => {
   const price = Number.parseFloat(usdPrice)
@@ -300,7 +302,7 @@ export default function Home() {
     { href: "#home", label: "الرئيسية" },
     { href: "#destinations", label: "الوجهات" },
     { href: "#hotels", label: "الفنادق" },
-    { href: "#offers", label: "العروض" },
+    { href: "#offers", label: "التأشيرات" },
     { href: "#services", label: "خدماتنا" },
     { href: "#about", label: "من نحن" },
     { href: "#contact", label: "تواصل معنا" },
@@ -521,13 +523,16 @@ export default function Home() {
           {/* Trust row */}
           <div className="max-w-5xl mx-auto mt-6 grid grid-cols-3 gap-3">
             {trust.map((t, i) => (
-              <div key={i} className="glass rounded-2xl px-3 py-3 flex items-center gap-3 justify-center text-center">
+              <div
+                key={i}
+                className="bg-white rounded-2xl px-3 py-3.5 flex items-center gap-3 justify-center text-center shadow-card border border-slate-100"
+              >
                 <t.icon className="w-6 h-6 text-[#ff8c42] shrink-0" />
                 <div className="text-right hidden sm:block">
-                  <p className="text-sm font-semibold text-white leading-tight">{t.title}</p>
-                  <p className="text-xs text-white/60">{t.desc}</p>
+                  <p className="text-sm font-semibold text-[#1e3a5f] leading-tight">{t.title}</p>
+                  <p className="text-xs text-slate-500">{t.desc}</p>
                 </div>
-                <p className="text-sm font-semibold text-white sm:hidden">{t.title}</p>
+                <p className="text-sm font-semibold text-[#1e3a5f] sm:hidden">{t.title}</p>
               </div>
             ))}
           </div>
@@ -1300,50 +1305,79 @@ export default function Home() {
         </div>
       </section>
 
-      {/* ─── Best offers ─── */}
+      {/* ─── التأشيرات والخدمات ─── */}
       <section id="offers" className="container mx-auto px-4 py-16">
         <div className="text-center mb-10">
           <div className="inline-flex items-center gap-2 text-[#ff8c42] font-semibold text-sm mb-2">
-            <Percent className="w-4 h-4" /> عروض حصرية لوقت محدود
+            <BadgeCheck className="w-4 h-4" /> خدمات الوكالة
           </div>
-          <h3 className="text-3xl font-bold text-[#1e3a5f]">أفضل العروض</h3>
+          <h3 className="text-3xl font-bold text-[#1e3a5f]">التأشيرات والخدمات</h3>
+          <p className="text-slate-500 mt-2">نُنجز تأشيرتك ونحجز رحلتك — تواصل معنا مباشرة عبر واتساب</p>
         </div>
-        <div className="grid md:grid-cols-3 gap-6">
-          {offers.map((o, i) => (
-            <Card key={i} className="border-0 rounded-2xl shadow-card hover:shadow-card-hover transition overflow-hidden group">
-              <div className={`relative h-48 overflow-hidden bg-gradient-to-br ${o.grad}`}>
-                <SmartImg
-                  src={o.image}
-                  alt={o.city}
-                  className="absolute inset-0 w-full h-full object-cover group-hover:scale-110 transition duration-500"
-                />
-                <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent" />
-                <div className="absolute top-3 right-3 bg-[#ff8c42] text-white text-xs font-extrabold px-3 py-1.5 rounded-full flex items-center gap-1 shadow-lg">
-                  <Percent className="w-3 h-3" /> خصم {o.discount}%
-                </div>
-                <div className="absolute bottom-3 right-4 left-4 text-white">
-                  <h4 className="text-xl font-bold">{o.city}</h4>
-                  <p className="text-xs text-white/80">{o.country}</p>
-                </div>
+
+        {/* بطاقة التأشيرات المميّزة */}
+        <div className="relative overflow-hidden rounded-3xl bg-brand-gradient text-white p-6 md:p-10 mb-6">
+          <div className="absolute -top-10 -left-10 w-40 h-40 rounded-full bg-[#ff8c42]/25 blur-3xl" />
+          <div className="relative grid md:grid-cols-[1fr_auto] gap-6 items-center">
+            <div>
+              <div className="inline-flex items-center gap-2 mb-3 bg-white/10 px-3 py-1.5 rounded-full text-sm font-semibold">
+                <FileText className="w-4 h-4 text-[#ff8c42]" /> تأشيرات سياحية
               </div>
-              <CardContent className="p-5">
-                <div className="flex items-center gap-1.5 text-sm text-slate-500 mb-4">
-                  <Calendar className="w-4 h-4 text-[#ff8c42]" /> {o.nights}
+              <h4 className="text-2xl font-bold mb-2">أنجز تأشيرتك بسهولة</h4>
+              <p className="text-white/75 text-sm max-w-lg mb-4">
+                نساعدك في استخراج تأشيرات السفر لأشهر الوجهات بأسرع وقت وأفضل الأسعار. اختر وجهتك وتواصل معنا للتفاصيل.
+              </p>
+              <div className="flex flex-wrap gap-2 mb-5">
+                {["الإمارات", "السعودية", "تركيا", "مصر", "ماليزيا", "تايلاند", "قطر", "الأردن"].map((c) => (
+                  <span key={c} className="text-xs font-medium px-3 py-1.5 rounded-full bg-white/10 border border-white/15">
+                    {c}
+                  </span>
+                ))}
+              </div>
+              <Button
+                onClick={() =>
+                  window.open(
+                    `https://wa.me/${WHATSAPP_NUMBER}?text=${encodeURIComponent("السلام عليكم، أرغب بالاستفسار عن خدمة التأشيرات.")}`,
+                    "_blank",
+                  )
+                }
+                className="bg-[#25D366] hover:bg-[#20BA5A] text-white flex items-center gap-2 rounded-xl h-12 px-6 font-bold shadow-md shadow-green-500/20"
+              >
+                <MessageCircle className="w-5 h-5" /> استفسر عن تأشيرتك
+              </Button>
+            </div>
+            <div className="hidden md:flex w-40 h-40 rounded-3xl bg-white/10 items-center justify-center shrink-0">
+              <FileText className="w-20 h-20 text-white/90" />
+            </div>
+          </div>
+        </div>
+
+        {/* بقية الخدمات */}
+        <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-5">
+          {[
+            { icon: Plane, title: "حجز الطيران", desc: "أفضل الأسعار على الخطوط السودانية والعالمية." },
+            { icon: Hotel, title: "حجز الفنادق", desc: "أكثر من 1.5 مليون فندق حول العالم بتأكيد فوري." },
+            { icon: Star, title: "باقات العمرة", desc: "باقات عمرة كاملة (طيران + إقامة + تنقّل)." },
+            { icon: ShieldCheck, title: "تأمين السفر", desc: "تأمين شامل يحميك طوال رحلتك." },
+          ].map((s, i) => (
+            <Card key={i} className="border border-slate-100 rounded-2xl shadow-card hover:shadow-card-hover transition group">
+              <CardContent className="p-5 flex flex-col h-full">
+                <div className="w-12 h-12 rounded-xl bg-[#ff8c42]/10 flex items-center justify-center mb-3 group-hover:bg-[#ff8c42] transition">
+                  <s.icon className="w-6 h-6 text-[#ff8c42] group-hover:text-white transition" />
                 </div>
-                <div className="flex items-end justify-between mb-4">
-                  <div>
-                    <p className="text-2xl font-extrabold text-[#ff8c42] leading-none">
-                      {sdg(o.newPrice)} <span className="text-sm font-bold">ج.س</span>
-                    </p>
-                    <p className="text-sm text-slate-400 line-through mt-1">{sdg(o.oldPrice)} ج.س</p>
-                  </div>
-                </div>
-                <Button
-                  className="w-full bg-[#ff8c42] hover:bg-[#ff7a2e] text-white flex items-center justify-center gap-2 rounded-xl h-11 font-bold"
-                  onClick={() => bookOfferViaWhatsApp(o.city, sdg(o.newPrice))}
+                <h4 className="text-lg font-bold text-[#1e3a5f] mb-1">{s.title}</h4>
+                <p className="text-sm text-slate-500 leading-relaxed flex-1">{s.desc}</p>
+                <button
+                  onClick={() =>
+                    window.open(
+                      `https://wa.me/${WHATSAPP_NUMBER}?text=${encodeURIComponent(`السلام عليكم، أرغب بالاستفسار عن خدمة: ${s.title}`)}`,
+                      "_blank",
+                    )
+                  }
+                  className="mt-4 inline-flex items-center gap-1.5 text-sm font-bold text-[#25D366] hover:text-[#20BA5A] transition"
                 >
-                  احجز الآن
-                </Button>
+                  <MessageCircle className="w-4 h-4" /> استفسر عبر واتساب
+                </button>
               </CardContent>
             </Card>
           ))}
@@ -1384,37 +1418,29 @@ export default function Home() {
         </div>
       </section>
 
-      {/* ─── Newsletter ─── */}
+      {/* ─── قروب الواتساب للعروض ─── */}
       <section className="container mx-auto px-4 py-14">
         <div className="bg-brand-gradient rounded-3xl px-6 py-12 md:px-14 relative overflow-hidden">
-          <div className="absolute -top-10 -left-10 w-40 h-40 rounded-full bg-[#ff8c42]/20 blur-3xl" />
+          <div className="absolute -top-10 -left-10 w-40 h-40 rounded-full bg-[#25D366]/25 blur-3xl" />
           <div className="absolute -bottom-16 -right-10 w-52 h-52 rounded-full bg-blue-400/10 blur-3xl" />
           <div className="relative grid md:grid-cols-2 gap-8 items-center">
             <div className="text-white">
-              <div className="inline-flex items-center gap-2 text-[#ff8c42] font-semibold text-sm mb-2">
-                <Send className="w-4 h-4" /> نشرتنا البريدية
+              <div className="inline-flex items-center gap-2 text-[#25D366] font-semibold text-sm mb-2">
+                <MessageCircle className="w-4 h-4" /> مجتمع العروض
               </div>
-              <h3 className="text-2xl md:text-3xl font-bold mb-2">اشترك في نشرتنا البريدية</h3>
+              <h3 className="text-2xl md:text-3xl font-bold mb-2">انضم لقروب الواتساب الخاص بالعروض</h3>
               <p className="text-white/75 text-sm max-w-md">
-                احصل على أفضل العروض والنصائح السفرية مباشرة إلى بريدك.
+                كن أول من يعرف بأحدث عروض الطيران والتأشيرات والباقات — تصلك مباشرة على واتساب، بدون رسائل مزعجة.
               </p>
             </div>
-            <form onSubmit={handleSubscribe} className="flex flex-col sm:flex-row gap-3">
-              <Input
-                type="email"
-                required
-                placeholder="أدخل بريدك الإلكتروني"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                className="h-12 rounded-xl bg-white border-0 flex-1 text-slate-800"
-              />
+            <div className="flex md:justify-end">
               <Button
-                type="submit"
-                className="h-12 rounded-xl bg-[#ff8c42] hover:bg-[#ff7a2e] text-white font-bold px-8 shrink-0"
+                onClick={() => window.open(WHATSAPP_GROUP_LINK, "_blank")}
+                className="h-14 rounded-2xl bg-[#25D366] hover:bg-[#20BA5A] text-white font-bold px-8 text-base flex items-center gap-2.5 shadow-lg shadow-green-500/25"
               >
-                اشترك الآن
+                <MessageCircle className="w-6 h-6" /> اشترك الآن
               </Button>
-            </form>
+            </div>
           </div>
         </div>
       </section>
@@ -1487,7 +1513,7 @@ export default function Home() {
                 {[
                   { href: "#home", label: "الرئيسية" },
                   { href: "#destinations", label: "الوجهات" },
-                  { href: "#offers", label: "العروض" },
+                  { href: "#offers", label: "التأشيرات" },
                   { href: "#hotels", label: "الفنادق" },
                   { href: "#contact", label: "تواصل معنا" },
                 ].map((l) => (
@@ -1585,7 +1611,7 @@ export default function Home() {
           </div>
 
           {[
-            { icon: Percent, label: "العروض", onClick: () => document.getElementById("offers")?.scrollIntoView({ behavior: "smooth" }) },
+            { icon: FileText, label: "التأشيرات", onClick: () => document.getElementById("offers")?.scrollIntoView({ behavior: "smooth" }) },
             { icon: MessageCircle, label: "واتساب", onClick: () => window.open(`https://wa.me/${WHATSAPP_NUMBER}`, "_blank") },
           ].map((item) => (
             <button key={item.label} onClick={item.onClick} className="flex flex-col items-center justify-center gap-1 h-full text-slate-500 active:text-[#ff8c42]">
