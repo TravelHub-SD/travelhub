@@ -4,15 +4,22 @@ import { searchFlights } from "@/lib/flightService"
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json()
-    const { origin, destination, departureDate, adults = 1 } = body
+    const { origin, destination, departureDate, adults = 1, children = 0, infants = 0 } = body
 
     if (!origin || !destination || !departureDate) {
       return NextResponse.json({ error: "يرجى إدخال جميع الحقول المطلوبة" }, { status: 400 })
     }
 
-    console.log("[travelhub] Searching flights:", { origin, destination, departureDate, adults })
+    console.log("[travelhub] Searching flights:", { origin, destination, departureDate, adults, children, infants })
 
-    const result = await searchFlights({ origin, destination, departureDate, adults: Number(adults) })
+    const result = await searchFlights({
+      origin,
+      destination,
+      departureDate,
+      adults: Number(adults),
+      children: Number(children),
+      infants: Number(infants),
+    })
 
     console.log("[travelhub] Flights found:", result.data.length, "source:", result.meta.source)
 

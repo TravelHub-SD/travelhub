@@ -176,7 +176,8 @@ export default function Home() {
   const resetFilters = () =>
     setFilters({ airlines: [], stops: "all", maxPrice: null, baggageOnly: false, refundableOnly: false })
 
-  const [flightForm, setFlightForm] = useState({ origin: "", destination: "", departureDate: "", returnDate: "", adults: "1", cabin: "economy" })
+  const [flightForm, setFlightForm] = useState({ origin: "", destination: "", departureDate: "", returnDate: "", adults: "1", children: "0", infants: "0", cabin: "economy" })
+  const totalPax = (Number(flightForm.adults) || 1) + (Number(flightForm.children) || 0) + (Number(flightForm.infants) || 0)
   const [loadingMsg, setLoadingMsg] = useState("")
   const [hotelForm, setHotelForm] = useState({ city: "", checkIn: "", checkOut: "", adults: "1" })
 
@@ -428,7 +429,9 @@ export default function Home() {
                       <PassengerSelect
                         label="المسافرون والدرجة"
                         adults={flightForm.adults}
-                        onAdultsChange={(n) => setFlightForm({ ...flightForm, adults: n })}
+                        children={flightForm.children}
+                        infants={flightForm.infants}
+                        onChange={(p) => setFlightForm({ ...flightForm, ...p })}
                         cabin={flightForm.cabin}
                         onCabinChange={(c) => setFlightForm({ ...flightForm, cabin: c })}
                       />
@@ -555,7 +558,7 @@ export default function Home() {
             <p className="text-slate-500 text-sm mt-2">
               {flightForm.departureDate && <span dir="ltr">{flightForm.departureDate}</span>}
               {flightForm.departureDate && " · "}
-              {flightForm.adults} مسافر
+              {totalPax} مسافر
             </p>
 
             {/* نقاط متحرّكة */}
@@ -610,7 +613,7 @@ export default function Home() {
                   )}
                   <span className="text-slate-300 hidden md:inline">•</span>
                   <span className="text-slate-500 hidden md:flex items-center gap-1">
-                    <Users className="w-3.5 h-3.5" /> {flightForm.adults} مسافر
+                    <Users className="w-3.5 h-3.5" /> {totalPax} مسافر
                   </span>
                 </div>
               ) : (

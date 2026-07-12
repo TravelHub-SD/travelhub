@@ -52,6 +52,8 @@ export interface SearchParams {
   destination: string
   departureDate: string
   adults?: number
+  children?: number
+  infants?: number
 }
 
 export interface FlightSearchResponse {
@@ -161,12 +163,14 @@ export async function searchFlights(params: SearchParams): Promise<FlightSearchR
   const destination = params.destination?.trim().toUpperCase()
   const departureDate = params.departureDate?.trim()
   const adults = Math.max(1, Math.min(9, Number(params.adults) || 1))
+  const children = Math.max(0, Math.min(8, Number(params.children) || 0))
+  const infants = Math.max(0, Math.min(adults, Number(params.infants) || 0))
 
   if (!origin || !destination || !departureDate) {
     throw new Error("يرجى إدخال مطار المغادرة والوجهة وتاريخ السفر")
   }
 
-  const p: Required<SearchParams> = { origin, destination, departureDate, adults }
+  const p: Required<SearchParams> = { origin, destination, departureDate, adults, children, infants }
 
   // بلا موصّل → بيانات تجريبية سودانية
   if (!process.env.SUDAN_CONNECTOR_URL) {

@@ -167,6 +167,63 @@ export async function listCarrierAirports(carrier) {
   }
 }
 
+// أداة فحص مؤقتة: تقرأ عناصر الركاب وبنية التقويم من محرّك الحجز الفعلي
+// لنعرف كيف نضبط (بالغين/أطفال/رضّع) وهل يمكن سحب الأيام المتاحة (الخضراء).
+export async function inspectBooking(carrier) {
+  let page
+  try {
+    const res = await getLoggedInPage(carrier, login)
+    page = res.page
+    const frame = await getBookingFrame(page)
+    await frame.waitForTimeout(1000)
+
+    const info = await frame.evaluate(() => {
+      const pick = (el) => ({
+        tag: el.tagName,
+        id: el.id || null,
+        name: el.getAttribute("name") || null,
+        cls: (el.className || "").toString().slice(0, 80) || null,
+        type: el.getAttribute("type") || null,
+        options:
+          el.tagName === "SELECT"
+            ? Array.from(el.options)
+                .map((o) => `${o.value}:${(o.textContent || "").trim()}`)
+                .slice(0, 15)
+            : undefined,
+      })
+      const controls = Array.from(document.querySelectorAll("select, input")).map(pick).slice(0, 60)
+      const paxEls = Array.from(
+        document.querySelectorAll(
+          '[class*="pax" i],[class*="passenger" i],[class*="traveller" i],[class*="traveler" i],[id*="pax" i],[id*="adult" i],[id*="child" i],[id*="infant" i],[id*="ADT" i],[id*="CHD" i]',
+        ),
+      )
+      const paxHtml = paxEls.slice(0, 8).map((e) => e.outerHTML.slice(0, 700))
+      return { controls, paxHtml }
+    })
+
+    // افتح التقويم واقرأ بنيته (لتقييم إمكانية الأيام المتاحة)
+    let calendarHtml = null
+    try {
+      await frame.click("#CalendarID0").catch(() => {})
+      await frame.waitForTimeout(1200)
+      calendarHtml = await frame.evaluate(() => {
+        const cal =
+          document.querySelector("#ui-datepicker-div") ||
+          document.querySelector('.ui-datepicker, .datepicker, [class*="calendar" i]')
+        return cal ? cal.outerHTML.slice(0, 5000) : null
+      })
+    } catch {
+      /* ignore */
+    }
+
+    return { carrier: carrier.name, ...info, calendarHtml }
+  } catch (e) {
+    return { error: e?.message || String(e) }
+  } finally {
+    if (page) await page.close().catch(() => {})
+  }
+}
+
 // البحث عبر خط واحد → مصفوفة رحلات مطبّعة. يبتلع الأخطاء ويرجّع [] مع تسجيلها.
 export async function searchCarrier(carrier, params) {
   let page

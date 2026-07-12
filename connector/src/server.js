@@ -5,7 +5,7 @@
 import express from "express"
 import { config } from "./config.js"
 import { cacheGet, cacheSet } from "./cache.js"
-import { searchCarrier, listCarrierAirports } from "./tti.js"
+import { searchCarrier, listCarrierAirports, inspectBooking } from "./tti.js"
 import { mockCarrierFlights } from "./mock.js"
 import { shutdownBrowser } from "./browser.js"
 
@@ -65,6 +65,16 @@ async function refreshAirports() {
   }
 }
 
+// أداة فحص مؤقتة — عناصر الركاب + بنية التقويم من المحرّك الفعلي.
+app.get("/inspect", async (_req, res) => {
+  if (config.mock || config.carriers.length === 0) return res.json({ mock: true })
+  try {
+    res.json(await inspectBooking(config.carriers[0]))
+  } catch (e) {
+    res.status(500).json({ error: e?.message || String(e) })
+  }
+})
+
 app.get("/airports", (_req, res) => {
   const fresh = airportsCache && Date.now() - airportsCache.t < 24 * 60 * 60 * 1000
   if (!fresh) refreshAirports() // تحديث بالخلفية (لا يعطّل الرد)
@@ -72,18 +82,20 @@ app.get("/airports", (_req, res) => {
 })
 
 // المنطق المشترك للبحث.
-async function doSearch({ origin, destination, departureDate, adults }) {
+async function doSearch({ origin, destination, departureDate, adults, children, infants }) {
   origin = String(origin || "").trim().toUpperCase()
   destination = String(destination || "").trim().toUpperCase()
   departureDate = String(departureDate || "").trim()
   adults = Math.max(1, Math.min(9, Number(adults) || 1))
+  children = Math.max(0, Math.min(8, Number(children) || 0))
+  infants = Math.max(0, Math.min(adults, Number(infants) || 0))
 
   if (!origin || !destination || !departureDate) {
     return { status: 400, body: { error: "origin, destination, departureDate مطلوبة" } }
   }
 
-  const params = { origin, destination, departureDate, adults }
-  const cacheKey = `${origin}-${destination}-${departureDate}-${adults}`
+  const params = { origin, destination, departureDate, adults, children, infants }
+  const cacheKey = `${origin}-${destination}-${departureDate}-${adults}-${children}-${infants}`
 
   const cached = cacheGet(cacheKey)
   if (cached) return { status: 200, body: { ...cached, meta: { ...cached.meta, cached: true } } }
