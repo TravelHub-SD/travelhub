@@ -51,6 +51,7 @@ export interface SearchParams {
   origin: string
   destination: string
   departureDate: string
+  returnDate?: string // عند وجوده: بحث ذهاب وعودة (رحلات كل اتجاه موسومة بـ leg)
   adults?: number
   children?: number
   infants?: number
@@ -70,7 +71,8 @@ async function fetchSudanFlights(
   if (!url) return { flights: [], warnings: [] }
 
   const controller = new AbortController()
-  const timeout = setTimeout(() => controller.abort(), 60000)
+  // الذهاب والعودة = ضعف عمليات الأتمتة، فنمنحه مهلة أطول
+  const timeout = setTimeout(() => controller.abort(), p.returnDate ? 120000 : 60000)
   try {
     const res = await fetch(`${url.replace(/\/$/, "")}/search`, {
       method: "POST",
@@ -162,6 +164,7 @@ export async function searchFlights(params: SearchParams): Promise<FlightSearchR
   const origin = params.origin?.trim().toUpperCase()
   const destination = params.destination?.trim().toUpperCase()
   const departureDate = params.departureDate?.trim()
+  const returnDate = params.returnDate?.trim() || ""
   const adults = Math.max(1, Math.min(9, Number(params.adults) || 1))
   const children = Math.max(0, Math.min(8, Number(params.children) || 0))
   const infants = Math.max(0, Math.min(adults, Number(params.infants) || 0))
@@ -170,11 +173,20 @@ export async function searchFlights(params: SearchParams): Promise<FlightSearchR
     throw new Error("يرجى إدخال مطار المغادرة والوجهة وتاريخ السفر")
   }
 
-  const p: Required<SearchParams> = { origin, destination, departureDate, adults, children, infants }
+  const p: Required<SearchParams> = { origin, destination, departureDate, returnDate, adults, children, infants }
 
-  // بلا موصّل → بيانات تجريبية سودانية
+  // بلا موصّل → بيانات تجريبية سودانية (مع دعم الذهاب والعودة)
   if (!process.env.SUDAN_CONNECTOR_URL) {
-    return mockFlights(p)
+    const out = mockFlights(p)
+    if (!returnDate) return out
+    const back = mockFlights({ ...p, origin: destination, destination: origin, departureDate: returnDate })
+    return {
+      ...out,
+      data: [
+        ...out.data.map((f) => ({ ...f, leg: "ذهاب" }) as any),
+        ...back.data.map((f) => ({ ...f, leg: "عودة" }) as any),
+      ],
+    }
   }
 
   const { flights, warnings } = await fetchSudanFlights(p)

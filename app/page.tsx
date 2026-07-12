@@ -204,7 +204,7 @@ export default function Home() {
       const response = await fetch("/api/flights/search", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(flightForm),
+        body: JSON.stringify({ ...flightForm, tripType }),
       })
       const data = await response.json()
       if (!response.ok) {
@@ -456,7 +456,13 @@ export default function Home() {
                         <Button
                           type="submit"
                           className="w-full bg-[#ff8c42] hover:bg-[#ff7a2e] text-white h-12 rounded-xl text-base font-bold shadow-lg shadow-orange-500/25"
-                          disabled={isLoading || !flightForm.origin || !flightForm.destination || !flightForm.departureDate}
+                          disabled={
+                            isLoading ||
+                            !flightForm.origin ||
+                            !flightForm.destination ||
+                            !flightForm.departureDate ||
+                            (tripType === "round-trip" && !flightForm.returnDate)
+                          }
                         >
                           {isLoading ? "جاري البحث..." : (<><Search className="ml-2 w-5 h-5" /> ابحث عن رحلات</>)}
                         </Button>
@@ -725,8 +731,22 @@ export default function Home() {
               return true
             })
 
-            const minPrice = filtered.length ? Math.min(...filtered.map((x: any) => x.price)) : 0
-            const minDur = filtered.length ? Math.min(...filtered.map((x: any) => x.dur)) : 0
+            // مجموعتا الذهاب والعودة (عند بحث ذهاب وعودة) — أرخص/أسرع تُحسب داخل كل مجموعة
+            const hasLegs = filtered.some((x: any) => x.flight.leg)
+            const legGroups: { label: string | null; route: string; items: any[] }[] = hasLegs
+              ? [
+                  {
+                    label: "رحلات الذهاب",
+                    route: `${flightForm.origin} ← ${flightForm.destination}`,
+                    items: filtered.filter((x: any) => x.flight.leg === "ذهاب"),
+                  },
+                  {
+                    label: "رحلات العودة",
+                    route: `${flightForm.destination} ← ${flightForm.origin}`,
+                    items: filtered.filter((x: any) => x.flight.leg === "عودة"),
+                  },
+                ].filter((g) => g.items.length)
+              : [{ label: null, route: "", items: filtered }]
             const sorted = [...filtered].sort((a: any, b: any) => {
               if (sortBy === "fastest") return a.dur - b.dur
               if (sortBy === "nonstop") return a.stops - b.stops || a.price - b.price
@@ -931,7 +951,28 @@ export default function Home() {
                     </div>
                   )}
 
-                  {sorted.map(({ flight, index, price, dur, stops }: any) => {
+                  {legGroups.map((group) => {
+                    const items = [...group.items].sort((a: any, b: any) => {
+                      if (sortBy === "fastest") return a.dur - b.dur
+                      if (sortBy === "nonstop") return a.stops - b.stops || a.price - b.price
+                      return a.price - b.price
+                    })
+                    const gMinPrice = items.length ? Math.min(...items.map((x: any) => x.price)) : 0
+                    const gMinDur = items.length ? Math.min(...items.map((x: any) => x.dur)) : 0
+                    return (
+                      <div key={group.label || "all"} className="space-y-4">
+                        {group.label && (
+                          <div className="flex items-center gap-2 pt-3">
+                            <span className={`w-8 h-8 rounded-lg bg-[#1e3a5f] flex items-center justify-center ${group.label === "رحلات العودة" ? "-scale-x-100" : ""}`}>
+                              <Plane className="w-4 h-4 text-white -rotate-45" />
+                            </span>
+                            <h4 className="font-bold text-[#1e3a5f] text-lg">{group.label}</h4>
+                            <span className="text-sm font-semibold text-slate-400" dir="ltr">
+                              {group.route}
+                            </span>
+                          </div>
+                        )}
+                        {items.map(({ flight, index, price, dur, stops }: any) => {
                     const priceSdg = fmtSDG(flight.price.total)
                     const segments = flight.itineraries[0].segments
                     const first = segments[0]
@@ -942,8 +983,8 @@ export default function Home() {
                     const airlineNames = carriers.map((c) => getAirlineName(c, language)).join("، ")
                     const stopCities = segments.slice(0, -1).map((s: any) => s.arrival.iataCode)
                     const offset = dayOffset(first.departure.at, last.arrival.at)
-                    const isCheapest = price === minPrice
-                    const isFastest = dur === minDur
+                    const isCheapest = price === gMinPrice
+                    const isFastest = dur === gMinDur
 
                     return (
                       <Card
@@ -1098,6 +1139,9 @@ export default function Home() {
                           </div>
                         </CardContent>
                       </Card>
+                    )
+                  })}
+                      </div>
                     )
                   })}
                 </div>

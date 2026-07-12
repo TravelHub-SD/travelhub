@@ -156,11 +156,20 @@ app.get("/airports", (_req, res) => {
   res.json(airportsCache?.data?.length ? airportsCache.data : FALLBACK_AIRPORTS)
 })
 
-// المنطق المشترك للبحث.
-async function doSearch({ origin, destination, departureDate, adults, children, infants }) {
+// طلبات متزامنة لنفس البحث تتشارك عملية واحدة (امتصاص الحمل العالي)
+const pendingSearches = new Map()
+
+const DATE_RE = /^\d{4}-\d{2}-\d{2}$/
+const validDay = (s) => DATE_RE.test(s) && !Number.isNaN(new Date(`${s}T00:00:00Z`).getTime())
+
+// المنطق المشترك للبحث. returnDate اختياري — عند وجوده نبحث رحلة العودة أيضاً
+// (اتجاه معاكس بتاريخ العودة) ونوسم كل رحلة بـ leg: "ذهاب" | "عودة" —
+// نفس منطق النظام: اختيار مستقل لرحلة كل اتجاه بسعره.
+async function doSearch({ origin, destination, departureDate, returnDate, adults, children, infants }) {
   origin = String(origin || "").trim().toUpperCase()
   destination = String(destination || "").trim().toUpperCase()
   departureDate = String(departureDate || "").trim()
+  returnDate = String(returnDate || "").trim()
   adults = Math.max(1, Math.min(9, Number(adults) || 1))
   children = Math.max(0, Math.min(8, Number(children) || 0))
   infants = Math.max(0, Math.min(adults, Number(infants) || 0))
@@ -170,35 +179,66 @@ async function doSearch({ origin, destination, departureDate, adults, children, 
     !/^[A-Z]{3}$/.test(origin) ||
     !/^[A-Z]{3}$/.test(destination) ||
     origin === destination ||
-    !/^\d{4}-\d{2}-\d{2}$/.test(departureDate) ||
-    Number.isNaN(new Date(`${departureDate}T00:00:00Z`).getTime())
+    !validDay(departureDate) ||
+    (returnDate && (!validDay(returnDate) || returnDate < departureDate))
   ) {
     return { status: 400, body: { error: "معاملات غير صالحة" } }
   }
 
-  const params = { origin, destination, departureDate, adults, children, infants }
-  const cacheKey = `${origin}-${destination}-${departureDate}-${adults}-${children}-${infants}`
+  const base = { adults, children, infants }
+  const outParams = { origin, destination, departureDate, ...base }
+  const retParams = returnDate ? { origin: destination, destination: origin, departureDate: returnDate, ...base } : null
+  const cacheKey = `${origin}-${destination}-${departureDate}-${returnDate || "OW"}-${adults}-${children}-${infants}`
 
   const cached = cacheGet(cacheKey)
   if (cached) return { status: 200, body: { ...cached, meta: { ...cached.meta, cached: true } } }
 
   // وضع تجريبي
   if (config.mock || config.carriers.length === 0) {
-    const data = mockCarrierFlights(params)
+    let data = mockCarrierFlights(outParams)
+    if (retParams) {
+      data = [
+        ...data.map((f) => ({ ...f, leg: "ذهاب" })),
+        ...mockCarrierFlights(retParams).map((f) => ({ ...f, leg: "عودة" })),
+      ]
+    }
     const payload = { data, meta: { source: "mock", carriers: ["تاركو", "بدر", "سودانير"], warnings: [] } }
     cacheSet(cacheKey, payload, config.cacheTtlMs)
     return { status: 200, body: payload }
   }
 
-  // بحث فعلي عبر كل الخطوط بالتوازي
-  const results = await Promise.all(config.carriers.map((c) => searchCarrier(c, params)))
-  const data = results.flatMap((r) => r.flights)
-  const warnings = results.filter((r) => r.error).map((r) => `${r.carrier}: ${r.error}`)
-  data.sort((a, b) => Number(a.price.total) - Number(b.price.total))
+  // دمج الطلبات المتزامنة المتطابقة في عملية واحدة
+  if (pendingSearches.has(cacheKey)) {
+    const body = await pendingSearches.get(cacheKey)
+    return { status: 200, body }
+  }
 
-  const payload = { data, meta: { source: "tti", carriers: config.carriers.map((c) => c.name), warnings } }
-  if (data.length) cacheSet(cacheKey, payload, config.cacheTtlMs) // لا نخبّئ فشلاً
-  return { status: 200, body: payload }
+  const run = (async () => {
+    // بحث فعلي: كل الخطوط بالتوازي، وعند الذهاب والعودة كلا الاتجاهين بالتوازي
+    const tasks = []
+    for (const c of config.carriers) {
+      tasks.push(searchCarrier(c, outParams).then((r) => ({ ...r, leg: retParams ? "ذهاب" : null })))
+      if (retParams) tasks.push(searchCarrier(c, retParams).then((r) => ({ ...r, leg: "عودة" })))
+    }
+    const results = await Promise.all(tasks)
+    const data = results.flatMap((r) => (r.leg ? r.flights.map((f) => ({ ...f, leg: r.leg })) : r.flights))
+    const warnings = results
+      .filter((r) => r.error)
+      .map((r) => `${r.carrier}${r.leg ? ` (${r.leg})` : ""}: ${r.error}`)
+    data.sort((a, b) => Number(a.price.total) - Number(b.price.total))
+
+    const payload = { data, meta: { source: "tti", carriers: config.carriers.map((c) => c.name), warnings } }
+    if (data.length) cacheSet(cacheKey, payload, config.cacheTtlMs) // لا نخبّئ فشلاً
+    return payload
+  })()
+
+  pendingSearches.set(cacheKey, run)
+  try {
+    const body = await run
+    return { status: 200, body }
+  } finally {
+    pendingSearches.delete(cacheKey)
+  }
 }
 
 // نقطة الموقع (POST).
