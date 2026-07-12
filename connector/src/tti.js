@@ -167,56 +167,80 @@ export async function listCarrierAirports(carrier) {
   }
 }
 
-// أداة فحص مؤقتة: تقرأ عناصر الركاب وبنية التقويم من محرّك الحجز الفعلي
-// لنعرف كيف نضبط (بالغين/أطفال/رضّع) وهل يمكن سحب الأيام المتاحة (الخضراء).
+// أداة فحص مؤقتة (v2): تقرأ هوية كل الحقول، نافذة التقويم المفتوحة فعلياً،
+// ونداءات الشبكة التي تجلب الأيام المتاحة — لربط الركاب والأيام الخضراء.
 export async function inspectBooking(carrier) {
   let page
   try {
     const res = await getLoggedInPage(carrier, login)
     page = res.page
-    const frame = await getBookingFrame(page)
-    await frame.waitForTimeout(1000)
 
-    const info = await frame.evaluate(() => {
-      const pick = (el) => ({
+    // التقط نداءات الشبكة المرتبطة بالتقويم/الإتاحة
+    const netCalls = []
+    page.on("response", async (r) => {
+      try {
+        const url = r.url()
+        if (/avail|calendar|dates|month|schedule/i.test(url) && !/\.(png|jpg|gif|css|woff|ico)/i.test(url)) {
+          let body = null
+          try {
+            body = (await r.text()).slice(0, 2000)
+          } catch {}
+          netCalls.push({ url: url.slice(0, 300), status: r.status(), body })
+        }
+      } catch {}
+    })
+
+    const frame = await getBookingFrame(page)
+    await frame.waitForTimeout(800)
+
+    // هوية كل حقل + النص المحيط به (لمعرفة حقول الركاب المجهولة)
+    const form = await frame.evaluate(() => {
+      const inputs = Array.from(document.querySelectorAll("input, select")).map((el) => ({
         tag: el.tagName,
         id: el.id || null,
         name: el.getAttribute("name") || null,
-        cls: (el.className || "").toString().slice(0, 80) || null,
+        cls: (el.className || "").toString().slice(0, 60) || null,
         type: el.getAttribute("type") || null,
+        ph: el.getAttribute("placeholder") || null,
+        val: (el.value || "").toString().slice(0, 25) || null,
+        ctx: (el.closest("div,td,li,label")?.textContent || "").trim().replace(/\s+/g, " ").slice(0, 70),
         options:
           el.tagName === "SELECT"
             ? Array.from(el.options)
                 .map((o) => `${o.value}:${(o.textContent || "").trim()}`)
-                .slice(0, 15)
+                .slice(0, 12)
             : undefined,
-      })
-      const controls = Array.from(document.querySelectorAll("select, input")).map(pick).slice(0, 60)
-      const paxEls = Array.from(
-        document.querySelectorAll(
-          '[class*="pax" i],[class*="passenger" i],[class*="traveller" i],[class*="traveler" i],[id*="pax" i],[id*="adult" i],[id*="child" i],[id*="infant" i],[id*="ADT" i],[id*="CHD" i]',
-        ),
-      )
-      const paxHtml = paxEls.slice(0, 8).map((e) => e.outerHTML.slice(0, 700))
-      return { controls, paxHtml }
+      }))
+      const formEl = document.querySelector("form") || document.body
+      return { inputs, formHtml: formEl.outerHTML.slice(0, 10000) }
     })
 
-    // افتح التقويم واقرأ بنيته (لتقييم إمكانية الأيام المتاحة)
-    let calendarHtml = null
-    try {
-      await frame.click("#CalendarID0").catch(() => {})
-      await frame.waitForTimeout(1200)
-      calendarHtml = await frame.evaluate(() => {
-        const cal =
-          document.querySelector("#ui-datepicker-div") ||
-          document.querySelector('.ui-datepicker, .datepicker, [class*="calendar" i]')
-        return cal ? cal.outerHTML.slice(0, 5000) : null
+    // افتح التقويم والتقط الطبقات الظاهرة فعلاً (datepicker يُلحق غالباً بالـ body)
+    await frame.click("#CalendarID0").catch(() => {})
+    await frame.waitForTimeout(1500)
+    const calendar = await frame.evaluate(() => {
+      const layers = Array.from(document.querySelectorAll("body > div, body > table")).filter((el) => {
+        const s = getComputedStyle(el)
+        return (
+          s.display !== "none" &&
+          s.visibility !== "hidden" &&
+          el.offsetHeight > 40 &&
+          (s.position === "absolute" || s.position === "fixed")
+        )
       })
-    } catch {
-      /* ignore */
-    }
+      return layers.slice(0, 4).map((el) => ({
+        cls: (el.className || "").toString().slice(0, 120),
+        html: el.outerHTML.slice(0, 6000),
+      }))
+    })
 
-    return { carrier: carrier.name, ...info, calendarHtml }
+    // انتقل شهراً للأمام لتحفيز نداء شبكة الإتاحة (لو موجود)
+    await frame
+      .click(".datepicker th.next, .datepicker .next, .ui-datepicker-next, [class*='next']")
+      .catch(() => {})
+    await page.waitForTimeout(2000)
+
+    return { carrier: carrier.name, ...form, calendar, netCalls: netCalls.slice(0, 10) }
   } catch (e) {
     return { error: e?.message || String(e) }
   } finally {
