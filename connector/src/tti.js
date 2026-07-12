@@ -123,32 +123,55 @@ export async function getCarrierAvailability(carrier, { origin, destination, sta
   }
 }
 
-// ضبط عدد الركاب (بالغون/أطفال/رضّع) — الحقول الثلاثة المرتبطة بـ
-// getSetTravelerCount بالترتيب، نضغط أزرار +/− الخاصة بها (Knockout) حتى نبلغ العدد.
+// ضبط عدد الركاب (بالغون/أطفال/رضّع) — الحقول الثلاثة المرتبطة بـ getSetTravelerCount.
+// نكتب مباشرة في نموذج Knockout (الأضمن)؛ وإلا نقرات +/− بعدد محسوب مسبقاً —
+// لا نقرأ قيمة الحقل بين النقرات لأن Knockout قد لا يحدّثها فتنفلت الحلقة.
 async function setPaxCounts(frame, { adults = 1, children = 0, infants = 0 }) {
-  await frame.evaluate(
+  const targets = [
+    Math.max(1, Math.min(9, Number(adults) || 1)),
+    Math.max(0, Math.min(8, Number(children) || 0)),
+    Math.max(0, Math.min(9, Number(infants) || 0)),
+  ]
+  const paxDebug = await frame.evaluate(
     ({ targets }) => {
+      const out = []
       const inputs = Array.from(
         document.querySelectorAll('input[data-bind*="getSetTravelerCount"]'),
       ).slice(0, 3)
       inputs.forEach((input, i) => {
+        const want = targets[i]
+        // 1) الكتابة عبر نموذج Knockout مباشرة
+        try {
+          const vm = window.ko && window.ko.dataFor(input)
+          const fn = vm && vm.getSetTravelerCount
+          if (typeof fn === "function") {
+            fn(want)
+            out.push(`ko${i}=${fn()}`)
+            return
+          }
+        } catch {}
+        // 2) بديل: نقرات بعدد ثابت محسوب من القيمة الابتدائية فقط
+        const start = Number(input.value) || 0
+        const diff = want - start
         const group = input.closest(".input-group")
-        if (!group) return
-        const btns = Array.from(group.querySelectorAll("button"))
+        const btns = group ? Array.from(group.querySelectorAll("button")) : []
         const plus = btns.find((b) => b.querySelector(".glyphicon-plus"))
         const minus = btns.find((b) => b.querySelector(".glyphicon-minus"))
-        const want = targets[i]
-        for (let g = 0; g < 15; g++) {
-          const cur = Number(input.value) || 0
-          if (cur === want) break
-          if (cur < want) plus?.click()
-          else minus?.click()
-        }
+        for (let k = 0; k < Math.abs(diff) && k < 9; k++) (diff > 0 ? plus : minus)?.click()
+        out.push(`clk${i}:${start}→${want}`)
       })
+      return out.join(",")
     },
-    { targets: [Math.max(1, Number(adults) || 1), Math.max(0, Number(children) || 0), Math.max(0, Number(infants) || 0)] },
+    { targets },
   )
   await frame.waitForTimeout(400)
+
+  // أغلق أي نافذة/تنبيه ركاب ظهر أثناء التعديل
+  await frame
+    .evaluate(() => {
+      document.querySelectorAll(".popover .close, .popover button.close, .popover [data-dismiss]").forEach((b) => b.click())
+    })
+    .catch(() => {})
 
   // بعض الإعدادات تُظهر قائمة "عمر الطفل" لكل طفل مُضاف — لو ظهرت قائمة
   // فارغة قرب عدّادات الركاب نختار قيمة وسطى (وإلا يرفض المحرّك البحث بصمت).
@@ -170,6 +193,7 @@ async function setPaxCounts(frame, { adults = 1, children = 0, infants = 0 }) {
     }
   })
   await frame.waitForTimeout(200)
+  return paxDebug
 }
 
 // تعبئة نموذج محرّك الحجز وتنفيذه (رحلة ذهاب فقط).
@@ -203,13 +227,15 @@ async function runSearch(page, carrier, params) {
   }, dateStr)
 
   // عدد الركاب (بالغون/أطفال/رضّع) من طلب الموقع
-  await setPaxCounts(frame, params)
+  const paxDebug = await setPaxCounts(frame, params)
 
   // إرسال البحث
   await frame
     .locator("button:has-text('Search flights'), a:has-text('Search flights'), :text('Search flights')")
     .first()
     .click()
+
+  return paxDebug
 }
 
 // قراءة نتائج البحث من كائن Knockout المضمّن في صفحة النتائج
@@ -415,9 +441,9 @@ export async function searchCarrier(carrier, params) {
   try {
     const res = await getLoggedInPage(carrier, login)
     page = res.page
-    await runSearch(page, carrier, params)
+    const paxDebug = await runSearch(page, carrier, params)
     const { flights, debug } = await readResults(page, carrier)
-    return { carrier: carrier.name, flights, error: debug }
+    return { carrier: carrier.name, flights, error: debug ? `${debug} | ركاب: ${paxDebug || "?"}` : null }
   } catch (err) {
     await invalidateSession(carrier.code) // جلسة قد تكون انتهت — أعِد الدخول لاحقاً
     return { carrier: carrier.name, flights: [], error: err?.message || String(err) }
