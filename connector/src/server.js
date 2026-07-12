@@ -5,7 +5,7 @@
 import express from "express"
 import { config } from "./config.js"
 import { cacheGet, cacheSet } from "./cache.js"
-import { searchCarrier, listCarrierAirports, inspectBooking } from "./tti.js"
+import { searchCarrier, listCarrierAirports, inspectBooking, getCarrierAvailability } from "./tti.js"
 import { mockCarrierFlights } from "./mock.js"
 import { shutdownBrowser } from "./browser.js"
 
@@ -64,6 +64,51 @@ async function refreshAirports() {
     airportsRefreshing = false
   }
 }
+
+// ─── أيام الإتاحة (الأيام الخضراء في التقويم) ────────────────────────────────
+// GET /availability?origin=KRT&destination=PZU&start=2026-08-01&end=2026-08-31
+// يدمج أيام كل الخطوط: { days: { "2026-08-03": 8, ... } }
+const AVAIL_TTL_MS = 6 * 60 * 60 * 1000
+
+app.get("/availability", async (req, res) => {
+  const origin = String(req.query.origin || "").trim().toUpperCase()
+  const destination = String(req.query.destination || "").trim().toUpperCase()
+  const start = String(req.query.start || "").trim()
+  const end = String(req.query.end || "").trim()
+  if (!/^[A-Z]{3}$/.test(origin) || !/^[A-Z]{3}$/.test(destination) || !/^\d{4}-\d{2}-\d{2}$/.test(start) || !/^\d{4}-\d{2}-\d{2}$/.test(end)) {
+    return res.status(400).json({ error: "origin, destination, start, end (YYYY-MM-DD) مطلوبة" })
+  }
+
+  const cacheKey = `avail:${origin}-${destination}-${start}-${end}`
+  const cached = cacheGet(cacheKey)
+  if (cached) return res.json({ ...cached, cached: true })
+
+  // وضع تجريبي: نمط أيام ثابت (إثنين/خميس) للعرض
+  if (config.mock || config.carriers.length === 0) {
+    const days = {}
+    const d = new Date(`${start}T00:00:00Z`)
+    const endD = new Date(`${end}T00:00:00Z`)
+    while (d <= endD) {
+      if ([1, 4].includes(d.getUTCDay())) days[d.toISOString().slice(0, 10)] = 9
+      d.setUTCDate(d.getUTCDate() + 1)
+    }
+    const payload = { days, carriers: [], warnings: ["mock"] }
+    cacheSet(cacheKey, payload, AVAIL_TTL_MS)
+    return res.json(payload)
+  }
+
+  const results = await Promise.all(
+    config.carriers.map((c) => getCarrierAvailability(c, { origin, destination, start, end })),
+  )
+  const days = {}
+  for (const r of results) {
+    for (const d of r.days) days[d.date] = Math.max(days[d.date] || 0, d.seats)
+  }
+  const warnings = results.filter((r) => r.error).map((r) => `${r.carrier}: ${r.error}`)
+  const payload = { days, carriers: results.map((r) => r.carrier), warnings }
+  if (Object.keys(days).length > 0) cacheSet(cacheKey, payload, AVAIL_TTL_MS)
+  res.json(payload)
+})
 
 // أداة فحص مؤقتة — عناصر الركاب + بنية التقويم من المحرّك الفعلي.
 app.get("/inspect", async (_req, res) => {

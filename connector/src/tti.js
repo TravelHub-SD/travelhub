@@ -71,9 +71,62 @@ async function selectBookingAirport(frame, menuIndex, iata) {
   if (!ok) throw new Error(`المطار ${iata} غير متاح في القائمة`)
 }
 
+// مسار محرّك الحجز لكل خط (يُكتشف من رابط الإطار أول مرة) —
+// يُستخدم لنداء GetAvailabilitySummary مباشرة بدون فتح النموذج.
+const engineBase = new Map() // carrier.code → "https://…/BookingEngine/"
+
+function rememberEngineBase(carrier, frame) {
+  try {
+    const u = frame.url()
+    const i = u.indexOf("/BookingEngine/")
+    if (i > 0 && !engineBase.has(carrier.code)) {
+      engineBase.set(carrier.code, u.slice(0, i + "/BookingEngine/".length))
+    }
+  } catch {}
+}
+
+// أيام الإتاحة لخط واحد عبر نداء الـ API الداخلي للمحرّك (سريع — بلا DOM).
+export async function getCarrierAvailability(carrier, { origin, destination, start, end }) {
+  let page
+  try {
+    const res = await getLoggedInPage(carrier, login)
+    page = res.page
+
+    let base = engineBase.get(carrier.code)
+    if (!base) {
+      const frame = await getBookingFrame(page) // مرة واحدة فقط لاكتشاف المسار
+      rememberEngineBase(carrier, frame)
+      base = engineBase.get(carrier.code)
+    }
+    if (!base) return { carrier: carrier.name, days: [], error: "لم يُعرف مسار المحرّك" }
+
+    const qs =
+      `departureAirportCode=${encodeURIComponent(origin)}` +
+      `&arrivalAirportCode=${encodeURIComponent(destination)}` +
+      `&startDate=${start}T00%3A00%3A00.000&endDate=${end}T23%3A59%3A59.999` +
+      `&externalParam=${encodeURIComponent(carrier.ext || "")}&ffpOnly=false&ssrs=`
+    const data = await page.evaluate(async (u) => {
+      const r = await fetch(u, { credentials: "include" })
+      if (!r.ok) return { __status: r.status }
+      return await r.json()
+    }, `${base}GetAvailabilitySummary?${qs}`)
+
+    if (data?.__status) return { carrier: carrier.name, days: [], error: `HTTP ${data.__status}` }
+    const days = (data?.Response?.Days || [])
+      .filter((d) => d?.AvailStatus === 1)
+      .map((d) => ({ date: String(d.Date).slice(0, 10), seats: Number(d.Availability) || 0 }))
+    return { carrier: carrier.name, days, error: null }
+  } catch (e) {
+    return { carrier: carrier.name, days: [], error: e?.message || String(e) }
+  } finally {
+    if (page) await page.close().catch(() => {})
+  }
+}
+
 // تعبئة نموذج محرّك الحجز وتنفيذه (رحلة ذهاب فقط).
-async function runSearch(page, { origin, destination, departureDate }) {
+async function runSearch(page, carrier, { origin, destination, departureDate }) {
   const frame = await getBookingFrame(page)
+  rememberEngineBase(carrier, frame)
 
   // نوع الرحلة: ذهاب فقط (افتراضي غالباً، لكن نؤكّده)
   await frame.getByText("One way", { exact: true }).first().click().catch(() => {})
@@ -142,6 +195,7 @@ export async function listCarrierAirports(carrier) {
     const res = await getLoggedInPage(carrier, login)
     page = res.page
     const frame = await getBookingFrame(page)
+    rememberEngineBase(carrier, frame)
     await frame
       .waitForFunction(() => document.querySelector(".dropdown-menu a strong") != null, { timeout: 15000 })
       .catch(() => {})
@@ -204,6 +258,10 @@ export async function inspectBooking(carrier) {
         ph: el.getAttribute("placeholder") || null,
         val: (el.value || "").toString().slice(0, 25) || null,
         ctx: (el.closest("div,td,li,label")?.textContent || "").trim().replace(/\s+/g, " ").slice(0, 70),
+        // للحقول الرقمية الصغيرة (عدّادات الركاب غالباً): HTML الجدّ لمعرفة هويتها
+        anc: /^\d$/.test((el.value || "").toString())
+          ? (el.parentElement?.parentElement?.outerHTML || "").slice(0, 900)
+          : undefined,
         options:
           el.tagName === "SELECT"
             ? Array.from(el.options)
@@ -240,7 +298,22 @@ export async function inspectBooking(carrier) {
       .catch(() => {})
     await page.waitForTimeout(2000)
 
-    return { carrier: carrier.name, ...form, calendar, netCalls: netCalls.slice(0, 10) }
+    // نفّذ البحث والتقط رابط صفحة النتائج (يحمل معاملات الركاب في الغالب)
+    let resultUrl = null
+    try {
+      await frame
+        .locator("button:has-text('Search flights'), a:has-text('Search flights'), :text('Search flights')")
+        .first()
+        .click()
+      await page.waitForTimeout(6000)
+      resultUrl =
+        page
+          .frames()
+          .map((f) => f.url())
+          .find((u) => /FlightList|SearchResult|Availability/i.test(u)) || null
+    } catch {}
+
+    return { carrier: carrier.name, ...form, calendar, netCalls: netCalls.slice(0, 10), resultUrl }
   } catch (e) {
     return { error: e?.message || String(e) }
   } finally {
@@ -254,7 +327,7 @@ export async function searchCarrier(carrier, params) {
   try {
     const res = await getLoggedInPage(carrier, login)
     page = res.page
-    await runSearch(page, params)
+    await runSearch(page, carrier, params)
     const flights = await readResults(page, carrier)
     return { carrier: carrier.name, flights, error: null }
   } catch (err) {

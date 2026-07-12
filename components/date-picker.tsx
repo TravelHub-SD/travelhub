@@ -25,14 +25,53 @@ interface DatePickerProps {
   placeholder?: string
   disabled?: boolean
   minDate?: string // YYYY-MM-DD
+  // مسار الرحلة — عند توفّره تُجلب أيام الإتاحة وتُلوَّن بالأخضر
+  routeFrom?: string
+  routeTo?: string
 }
 
 const WEEKDAYS = ["سبت", "أحد", "إثن", "ثلا", "أرب", "خمي", "جمع"] // weekStartsOn = 6 (Saturday)
 
-export function DatePicker({ value, onChange, label, placeholder = "اختر التاريخ", disabled, minDate }: DatePickerProps) {
+// كاش إتاحة مشترك بين كل التقاويم: "KRT-PZU-2026-08" → { "2026-08-03": 9, ... }
+const availCache = new Map<string, Record<string, number>>()
+
+export function DatePicker({ value, onChange, label, placeholder = "اختر التاريخ", disabled, minDate, routeFrom, routeTo }: DatePickerProps) {
   const [open, setOpen] = useState(false)
   const [view, setView] = useState<Date>(value ? parseISO(value) : startOfToday())
+  const [avail, setAvail] = useState<Record<string, number> | null>(null)
+  const [availLoading, setAvailLoading] = useState(false)
   const ref = useRef<HTMLDivElement>(null)
+
+  // جلب أيام الإتاحة للشهر المعروض (من النظام عبر الموصّل)
+  useEffect(() => {
+    if (!open || !routeFrom || !routeTo || !/^[A-Z]{3}$/.test(routeFrom) || !/^[A-Z]{3}$/.test(routeTo)) {
+      setAvail(null)
+      return
+    }
+    const monthKey = format(view, "yyyy-MM")
+    const cacheKey = `${routeFrom}-${routeTo}-${monthKey}`
+    const cached = availCache.get(cacheKey)
+    if (cached) {
+      setAvail(cached)
+      return
+    }
+    let alive = true
+    setAvailLoading(true)
+    const start = format(startOfMonth(view), "yyyy-MM-dd")
+    const end = format(endOfMonth(view), "yyyy-MM-dd")
+    fetch(`/api/availability?origin=${routeFrom}&destination=${routeTo}&start=${start}&end=${end}`)
+      .then((r) => r.json())
+      .then((d) => {
+        const days = d?.days || {}
+        availCache.set(cacheKey, days)
+        if (alive) setAvail(days)
+      })
+      .catch(() => alive && setAvail(null))
+      .finally(() => alive && setAvailLoading(false))
+    return () => {
+      alive = false
+    }
+  }, [open, view, routeFrom, routeTo])
 
   useEffect(() => {
     const h = (e: MouseEvent) => {
@@ -101,11 +140,14 @@ export function DatePicker({ value, onChange, label, placeholder = "اختر ا�
                 const isDisabled = isBefore(day, min)
                 const isSel = selected && isSameDay(day, selected)
                 const outside = !isSameMonth(day, view)
+                const seats = avail?.[format(day, "yyyy-MM-dd")]
+                const hasFlights = !isDisabled && !outside && seats != null && seats > 0
                 return (
                   <button
                     key={day.toISOString()}
                     type="button"
                     disabled={isDisabled}
+                    title={hasFlights ? `${seats} مقعد متاح` : undefined}
                     onClick={() => {
                       onChange(format(day, "yyyy-MM-dd"))
                       setOpen(false)
@@ -117,7 +159,9 @@ export function DatePicker({ value, onChange, label, placeholder = "اختر ا�
                           ? "text-slate-300 cursor-not-allowed"
                           : outside
                             ? "text-slate-300 hover:bg-slate-50"
-                            : "text-slate-700 hover:bg-[#ff8c42]/10"
+                            : hasFlights
+                              ? "bg-emerald-500/15 text-emerald-700 font-bold hover:bg-emerald-500/25"
+                              : "text-slate-700 hover:bg-[#ff8c42]/10"
                     }`}
                   >
                     {format(day, "d")}
@@ -125,6 +169,15 @@ export function DatePicker({ value, onChange, label, placeholder = "اختر ا�
                 )
               })}
             </div>
+            {routeFrom && routeTo && (
+              <div className="flex items-center justify-between mt-3 pt-2 border-t border-slate-100 text-[11px] text-slate-500">
+                <span className="flex items-center gap-1.5">
+                  <span className="w-3 h-3 rounded bg-emerald-500/20 border border-emerald-500/50 inline-block" />
+                  أيام بها رحلات متاحة
+                </span>
+                {availLoading && <span className="text-slate-400">جاري التحديث...</span>}
+              </div>
+            )}
           </div>
         )}
       </div>

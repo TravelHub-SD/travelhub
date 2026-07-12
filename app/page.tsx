@@ -415,6 +415,8 @@ export default function Home() {
                         label="تاريخ المغادرة"
                         value={flightForm.departureDate}
                         onChange={(v) => setFlightForm({ ...flightForm, departureDate: v })}
+                        routeFrom={flightForm.origin}
+                        routeTo={flightForm.destination}
                       />
                       <DatePicker
                         label="تاريخ العودة"
@@ -423,6 +425,8 @@ export default function Home() {
                         disabled={tripType === "one-way"}
                         minDate={flightForm.departureDate || undefined}
                         placeholder={tripType === "one-way" ? "ذهاب فقط" : "اختر التاريخ"}
+                        routeFrom={flightForm.destination}
+                        routeTo={flightForm.origin}
                       />
                     </div>
                     <div className="grid md:grid-cols-3 gap-4 mt-4">
