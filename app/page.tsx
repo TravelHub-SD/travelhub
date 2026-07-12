@@ -907,8 +907,8 @@ export default function Home() {
                     const first = segments[0]
                     const last = segments[segments.length - 1]
                     const carriers = Array.from(new Set(segments.map((s: any) => s.carrierCode))) as string[]
-                    const logoFor = (code: string) =>
-                      segments.find((s: any) => s.carrierCode === code)?.logo || getAirlineLogo(code)
+                    // اللوغو المحلي الرسمي أولاً (تاركو/بدر)، ثم لوغو الموصّل، ثم kiwi
+                    const logoFor = (code: string) => getAirlineLogo(code)
                     const airlineNames = carriers.map((c) => getAirlineName(c, language)).join("، ")
                     const stopCities = segments.slice(0, -1).map((s: any) => s.arrival.iataCode)
                     const offset = dayOffset(first.departure.at, last.arrival.at)
@@ -995,7 +995,11 @@ export default function Home() {
                               <div className="flex flex-wrap items-center gap-x-4 gap-y-2 mt-4 pt-4 border-t border-slate-100 text-xs text-slate-500">
                                 <span className="flex items-center gap-1.5">
                                   <Luggage className="w-3.5 h-3.5 text-[#ff8c42]" />
-                                  {flight.baggage?.checked > 0 ? `${flight.baggage.checked} حقيبة مسجّلة` : "بدون حقيبة مسجّلة"}
+                                  {flight.baggage?.checkedKg > 0
+                                    ? `أمتعة مسجّلة ${flight.baggage.checkedKg} كجم`
+                                    : flight.baggage?.checked > 0
+                                      ? `${flight.baggage.checked} حقيبة مسجّلة`
+                                      : "بدون أمتعة مسجّلة"}
                                 </span>
                                 <span className="flex items-center gap-1.5">
                                   <Briefcase className="w-3.5 h-3.5 text-[#ff8c42]" /> حقيبة يد
@@ -1017,7 +1021,9 @@ export default function Home() {
                                 <p className="text-3xl font-extrabold text-[#ff8c42] leading-none">
                                   {priceSdg} <span className="text-lg font-bold">ج.س</span>
                                 </p>
-                                <p className="text-xs text-slate-400 mt-1">سعر البالغ الواحد · شامل الضرائب</p>
+                                <p className="text-xs text-slate-400 mt-1">
+                                  {totalPax > 1 ? `إجمالي ${totalPax} مسافرين · شامل الضرائب` : "للمسافر الواحد · شامل الضرائب"}
+                                </p>
                               </div>
                               <Button
                                 className="w-full bg-[#25D366] hover:bg-[#20BA5A] text-white flex items-center justify-center gap-2 rounded-xl h-11 font-bold shadow-md shadow-green-500/20"
@@ -1204,7 +1210,7 @@ export default function Home() {
                 {/* fare details */}
                 <div className="grid grid-cols-2 gap-3 pt-4 border-t border-slate-100">
                   {[
-                    { icon: Luggage, label: "الأمتعة المسجّلة", value: flight.baggage?.checked > 0 ? `${flight.baggage.checked} حقيبة` : "غير مشمولة" },
+                    { icon: Luggage, label: "الأمتعة المسجّلة", value: flight.baggage?.checkedKg > 0 ? `${flight.baggage.checkedKg} كجم` : flight.baggage?.checked > 0 ? `${flight.baggage.checked} حقيبة` : "غير مشمولة" },
                     { icon: Briefcase, label: "حقيبة اليد", value: flight.baggage?.carryOn > 0 ? `${flight.baggage.carryOn} حقيبة` : "غير مشمولة" },
                     { icon: RefreshCw, label: "الاسترجاع", value: flight.refundable ? "مسموح" : "غير مسموح" },
                     { icon: RotateCcw, label: "تعديل الحجز", value: flight.changeable ? "مسموح" : "غير مسموح" },

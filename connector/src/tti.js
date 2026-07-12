@@ -215,8 +215,23 @@ async function readResults(page, carrier) {
     })
     .catch(() => null)
 
-  if (!model) return []
-  return flightsFromServerModel(model, carrier)
+  if (!model) return { flights: [], debug: "لا ServerModel (لم تُحمَّل صفحة النتائج؟)" }
+  const flights = flightsFromServerModel(model, carrier)
+  let debug = null
+  if (!flights.length) {
+    // شكل البيانات لتشخيص حالات الصفر (مثلاً بحث فيه طفل)
+    try {
+      const s = model.PricedTripsSummary || []
+      const f0 = s[0]?.Trips?.[0]?.Flights?.[0]
+      const pts = (f0?.PassengerTypes || [])
+        .map((pt) => `${pt.Code || pt.PaxType || "?"}:${(pt.FareBasisList || []).length}أجرة`)
+        .join(",")
+      debug = `صفر رحلات — summaries=${s.length}, trips=${s[0]?.Trips?.length ?? 0}, paxTypes=[${pts}]`
+    } catch {
+      debug = "صفر رحلات — تعذّر قراءة الشكل"
+    }
+  }
+  return { flights, debug }
 }
 
 // يقرأ مطارات النظام لخط معيّن من قوائم محرّك الحجز (المغادرة + الوجهة).
@@ -360,8 +375,8 @@ export async function searchCarrier(carrier, params) {
     const res = await getLoggedInPage(carrier, login)
     page = res.page
     await runSearch(page, carrier, params)
-    const flights = await readResults(page, carrier)
-    return { carrier: carrier.name, flights, error: null }
+    const { flights, debug } = await readResults(page, carrier)
+    return { carrier: carrier.name, flights, error: debug }
   } catch (err) {
     await invalidateSession(carrier.code) // جلسة قد تكون انتهت — أعِد الدخول لاحقاً
     return { carrier: carrier.name, flights: [], error: err?.message || String(err) }

@@ -62,8 +62,15 @@ export function getAirlineName(code: string | undefined, lang: "ar" | "en" = "ar
   return lang === "ar" ? airline.nameAr : airline.nameEn
 }
 
-/** رابط لوغو الشركة من مصدر kiwi (يدعم أغلب أكواد IATA). */
+/** لوغوهات محلية رسمية (مرفوعة في public/logos/) — لها الأولوية. */
+const LOCAL_LOGOS: Record<string, string> = {
+  "3T": "/logos/tarco.png",
+  J4: "/logos/badr.jpg",
+}
+
+/** رابط لوغو الشركة: محلي إن وُجد، وإلا من مصدر kiwi (يدعم أغلب أكواد IATA). */
 export function getAirlineLogo(code: string | undefined): string {
   if (!code) return "/abstract-airline-logo.png"
-  return `https://images.kiwi.com/airlines/128/${code.toUpperCase()}.png`
+  const up = code.toUpperCase()
+  return LOCAL_LOGOS[up] || `https://images.kiwi.com/airlines/128/${up}.png`
 }

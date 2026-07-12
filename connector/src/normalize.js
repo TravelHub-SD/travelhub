@@ -101,20 +101,31 @@ export function flightsFromServerModel(model, carrier) {
       let cabinCode = ""
 
       const segments = segs.map((seg) => {
-        const fares = seg.PassengerTypes?.[0]?.FareBasisList || []
-        const cheapest = fares.reduce(
-          (min, f) => (!min || f.Amount.TotalAmount < min.Amount.TotalAmount ? f : min),
-          null,
-        )
-        if (!cheapest) {
+        // السعر = مجموع أرخص أجرة لكل فئة ركاب (بالغ + طفل + رضيع) — يطابق
+        // "Total price" في النظام. أي فئة بلا أجور ⇒ الرحلة غير قابلة للحجز للتركيبة.
+        const paxTypes = seg.PassengerTypes || []
+        if (!paxTypes.length) {
           ok = false
-        } else {
+        }
+        for (const pt of paxTypes) {
+          const fares = pt?.FareBasisList || []
+          const cheapest = fares.reduce(
+            (min, f) => (!min || f.Amount.TotalAmount < min.Amount.TotalAmount ? f : min),
+            null,
+          )
+          if (!cheapest) {
+            ok = false
+            continue
+          }
           total += cheapest.Amount.TotalAmount
-          bagKg = Math.max(bagKg, cheapest.BagAllowance?.CheckedAllowance?.BagWeight || 0)
-          const fb = fareRef[cheapest.DataIdFareBasis]
-          if (fb) refundable = refundable || fb.Refundable >= 2
-          seats = cheapest.FreeSeatCount ?? seats
-          cabinCode = bClass[cheapest.DataIdBookingClass]?.Code || cabinCode
+          // بيانات العرض (أمتعة/استرجاع/مقاعد/درجة) من فئة البالغين — وهي الأولى غالباً
+          if (pt === paxTypes[0]) {
+            bagKg = Math.max(bagKg, cheapest.BagAllowance?.CheckedAllowance?.BagWeight || 0)
+            const fb = fareRef[cheapest.DataIdFareBasis]
+            if (fb) refundable = refundable || fb.Refundable >= 2
+            seats = cheapest.FreeSeatCount ?? seats
+            cabinCode = bClass[cheapest.DataIdBookingClass]?.Code || cabinCode
+          }
         }
 
         const depAt = asDate(seg.DepartureDate?.DateTime)
