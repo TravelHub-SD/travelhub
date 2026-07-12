@@ -176,9 +176,57 @@ export default function Home() {
   const resetFilters = () =>
     setFilters({ airlines: [], stops: "all", maxPrice: null, baggageOnly: false, refundableOnly: false })
 
-  const [flightForm, setFlightForm] = useState({ origin: "", destination: "", departureDate: "", returnDate: "", adults: "1", cabin: "economy" })
+  const [flightForm, setFlightForm] = useState({ origin: "", destination: "", departureDate: "", returnDate: "", adults: "1", children: "0", infants: "0", cabin: "economy" })
   const [loadingMsg, setLoadingMsg] = useState("")
   const [hotelForm, setHotelForm] = useState({ city: "", checkIn: "", checkOut: "", adults: "1" })
+
+  // إجمالي المسافرين (بالغون + أطفال + رضّع) لعرضه في الملخّصات
+  const paxCount =
+    (Number(flightForm.adults) || 1) + (Number(flightForm.children) || 0) + (Number(flightForm.infants) || 0)
+
+  // ─── أيام توفّر الرحلات (التقويم الأخضر من نظام الحجز) ───
+  // تُجلب عند اكتمال المطارين وتُمرَّر للتقويم لتظليل أيام الرحلات بالأخضر.
+  // مسار الذهاب دائماً، ومسار العودة (معكوساً) عند اختيار ذهاب وعودة.
+  const [availability, setAvailability] = useState<Record<string, string[]>>({})
+  const [availabilityLoading, setAvailabilityLoading] = useState(false)
+
+  useEffect(() => {
+    const { origin, destination } = flightForm
+    if (!origin || !destination || origin === destination) return
+
+    const routes = [`${origin}-${destination}`]
+    if (tripType === "round-trip") routes.push(`${destination}-${origin}`)
+    const missing = routes.filter((r) => !(r in availability))
+    if (!missing.length) return
+
+    let cancelled = false
+    setAvailabilityLoading(true)
+    Promise.all(
+      missing.map(async (route) => {
+        const [o, d] = route.split("-")
+        try {
+          const res = await fetch(`/api/flights/availability?origin=${o}&destination=${d}`)
+          const json = res.ok ? await res.json() : null
+          return [route, (json?.dates as string[]) ?? []] as const
+        } catch {
+          return [route, []] as const
+        }
+      }),
+    )
+      .then((entries) => {
+        if (!cancelled) setAvailability((prev) => ({ ...prev, ...Object.fromEntries(entries) }))
+      })
+      .finally(() => {
+        if (!cancelled) setAvailabilityLoading(false)
+      })
+    return () => {
+      cancelled = true
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [flightForm.origin, flightForm.destination, tripType])
+
+  const departureAvail = availability[`${flightForm.origin}-${flightForm.destination}`] ?? null
+  const returnAvail = availability[`${flightForm.destination}-${flightForm.origin}`] ?? null
 
   const handleFlightSearch = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -414,6 +462,8 @@ export default function Home() {
                         label="تاريخ المغادرة"
                         value={flightForm.departureDate}
                         onChange={(v) => setFlightForm({ ...flightForm, departureDate: v })}
+                        availableDates={departureAvail}
+                        availabilityLoading={availabilityLoading}
                       />
                       <DatePicker
                         label="تاريخ العودة"
@@ -422,6 +472,8 @@ export default function Home() {
                         disabled={tripType === "one-way"}
                         minDate={flightForm.departureDate || undefined}
                         placeholder={tripType === "one-way" ? "ذهاب فقط" : "اختر التاريخ"}
+                        availableDates={returnAvail}
+                        availabilityLoading={availabilityLoading}
                       />
                     </div>
                     <div className="grid md:grid-cols-3 gap-4 mt-4">
@@ -429,6 +481,10 @@ export default function Home() {
                         label="المسافرون والدرجة"
                         adults={flightForm.adults}
                         onAdultsChange={(n) => setFlightForm({ ...flightForm, adults: n })}
+                        childrenCount={flightForm.children}
+                        onChildrenChange={(n) => setFlightForm({ ...flightForm, children: n })}
+                        infants={flightForm.infants}
+                        onInfantsChange={(n) => setFlightForm({ ...flightForm, infants: n })}
                         cabin={flightForm.cabin}
                         onCabinChange={(c) => setFlightForm({ ...flightForm, cabin: c })}
                       />
@@ -555,7 +611,7 @@ export default function Home() {
             <p className="text-slate-500 text-sm mt-2">
               {flightForm.departureDate && <span dir="ltr">{flightForm.departureDate}</span>}
               {flightForm.departureDate && " · "}
-              {flightForm.adults} مسافر
+              {paxCount} مسافر
             </p>
 
             {/* نقاط متحرّكة */}
@@ -610,7 +666,7 @@ export default function Home() {
                   )}
                   <span className="text-slate-300 hidden md:inline">•</span>
                   <span className="text-slate-500 hidden md:flex items-center gap-1">
-                    <Users className="w-3.5 h-3.5" /> {flightForm.adults} مسافر
+                    <Users className="w-3.5 h-3.5" /> {paxCount} مسافر
                   </span>
                 </div>
               ) : (

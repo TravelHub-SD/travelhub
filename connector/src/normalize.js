@@ -81,7 +81,26 @@ export function normalizeRow(row, carrier) {
 }
 
 // ─── المسار الحقيقي: من كائن TTIModel.FlightListDisplay.ServerModel ─────────
-export function flightsFromServerModel(model, carrier) {
+
+// كم راكباً يمثّل عنصر PassengerTypes هذا؟
+// أولوية: حقل عدد صريح في الكائن؛ ثم عدد الطلب حسب كود الفئة (ADT/CHD/INF)؛
+// وإن تكرّرت الفئة نفسها في المصفوفة فالعنصر يمثّل راكباً واحداً.
+function paxTypeCount(pt, idx, allTypes, pax) {
+  for (const f of ["PassengerCount", "Count", "Quantity", "NumberOfPassengers", "PaxCount"]) {
+    if (typeof pt?.[f] === "number" && pt[f] > 0) return pt[f]
+  }
+  const codeOf = (p) =>
+    String(p?.PassengerTypeCode ?? p?.PassengerType ?? p?.Code ?? p?.Type ?? "").toUpperCase()
+  const code = codeOf(pt)
+  const sameType = allTypes.filter((p) => codeOf(p) === code)
+  if (sameType.length > 1) return 1 // عنصر لكل راكب
+  if (/AD/.test(code)) return pax.adults
+  if (/CH|CNN/.test(code)) return pax.children || 1
+  if (/IN/.test(code)) return pax.infants || 1
+  return idx === 0 ? pax.adults : 1
+}
+
+export function flightsFromServerModel(model, carrier, pax = { adults: 1, children: 0, infants: 0 }) {
   if (!model) return []
   const airports = Object.fromEntries((model.DataReferenceAirports || []).map((a) => [a.DataId, a]))
   const fareRef = Object.fromEntries((model.DataReferenceFareBasis || []).map((f) => [f.DataId, f]))
@@ -101,15 +120,26 @@ export function flightsFromServerModel(model, carrier) {
       let cabinCode = ""
 
       const segments = segs.map((seg) => {
-        const fares = seg.PassengerTypes?.[0]?.FareBasisList || []
-        const cheapest = fares.reduce(
-          (min, f) => (!min || f.Amount.TotalAmount < min.Amount.TotalAmount ? f : min),
-          null,
-        )
+        // السعر = مجموع أرخص أجرة لكل فئة ركاب (بالغ/طفل/رضيع) × عدد ركابها.
+        // أجور FareBasisList للفرد الواحد من الفئة.
+        const types = seg.PassengerTypes || []
+        let cheapest = null // أرخص أجرة فئة البالغين (للأمتعة/الاسترداد/المقاعد)
+        for (const [ti, pt] of types.entries()) {
+          const fares = pt?.FareBasisList || []
+          const c = fares.reduce(
+            (min, f) => (!min || f.Amount.TotalAmount < min.Amount.TotalAmount ? f : min),
+            null,
+          )
+          if (!c) {
+            if (ti === 0) ok = false
+            continue
+          }
+          total += c.Amount.TotalAmount * paxTypeCount(pt, ti, types, pax)
+          if (ti === 0) cheapest = c
+        }
         if (!cheapest) {
           ok = false
         } else {
-          total += cheapest.Amount.TotalAmount
           bagKg = Math.max(bagKg, cheapest.BagAllowance?.CheckedAllowance?.BagWeight || 0)
           const fb = fareRef[cheapest.DataIdFareBasis]
           if (fb) refundable = refundable || fb.Refundable >= 2

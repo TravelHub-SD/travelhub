@@ -23,8 +23,16 @@ npm start                 # أو: MOCK=1 npm start للتجربة ببيانات
 # تجربة:
 curl -X POST localhost:8080/search -H 'content-type: application/json' \
   -H 'x-connector-key: <CONNECTOR_API_KEY>' \
-  -d '{"origin":"KRT","destination":"DXB","departureDate":"2026-08-01","adults":1}'
+  -d '{"origin":"KRT","destination":"DXB","departureDate":"2026-08-01","adults":2,"children":1,"infants":0}'
 ```
+
+## النقاط (endpoints)
+| النقطة | الوصف |
+|---|---|
+| `POST /search` | بحث رحلات. الركاب: `adults` (1–9)، `children` (0–8، عمر 2–11)، `infants` (0–عدد البالغين). |
+| `GET /availability?origin=KRT&destination=PZU&months=3` | أيام الرحلات المتاحة (تُقرأ من التقويم الأخضر في محرّك الحجز)، اتحاد كل الخطوط، كاش 6 ساعات (`AVAILABILITY_TTL_MINUTES`). |
+| `GET /airports` | مطارات النظام للقوائم المنسدلة. |
+| `GET /probe?carrier=badr` | **مؤقتة للتشخيص**: تفحص خانات الركاب ومفاتيح Knockout. أضف `origin`/`destination` لفحص تقويم التوفّر، و`deep=1&departureDate=...&adults=2&children=1` لبحث كامل مع عيّنة `PassengerTypes` الخام (للتحقق من التسعير متعدد الركاب). تُزال بعد التأكيد. |
 
 ## متغيّرات البيئة (راجع `.env.example`)
 | المتغيّر | الوصف |

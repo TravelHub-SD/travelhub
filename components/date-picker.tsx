@@ -25,11 +25,23 @@ interface DatePickerProps {
   placeholder?: string
   disabled?: boolean
   minDate?: string // YYYY-MM-DD
+  // أيام بها رحلات (من تقويم نظام الحجز) — تُعرض بالأخضر. null = لا بيانات بعد.
+  availableDates?: string[] | null
+  availabilityLoading?: boolean
 }
 
 const WEEKDAYS = ["سبت", "أحد", "إثن", "ثلا", "أرب", "خمي", "جمع"] // weekStartsOn = 6 (Saturday)
 
-export function DatePicker({ value, onChange, label, placeholder = "اختر التاريخ", disabled, minDate }: DatePickerProps) {
+export function DatePicker({
+  value,
+  onChange,
+  label,
+  placeholder = "اختر التاريخ",
+  disabled,
+  minDate,
+  availableDates,
+  availabilityLoading,
+}: DatePickerProps) {
   const [open, setOpen] = useState(false)
   const [view, setView] = useState<Date>(value ? parseISO(value) : startOfToday())
   const ref = useRef<HTMLDivElement>(null)
@@ -48,6 +60,7 @@ export function DatePicker({ value, onChange, label, placeholder = "اختر ا�
     start: startOfWeek(startOfMonth(view), { weekStartsOn: 6 }),
     end: endOfWeek(endOfMonth(view), { weekStartsOn: 6 }),
   })
+  const availableSet = availableDates?.length ? new Set(availableDates) : null
 
   return (
     <div className="space-y-2" ref={ref}>
@@ -101,6 +114,7 @@ export function DatePicker({ value, onChange, label, placeholder = "اختر ا�
                 const isDisabled = isBefore(day, min)
                 const isSel = selected && isSameDay(day, selected)
                 const outside = !isSameMonth(day, view)
+                const isAvailable = !isDisabled && !outside && availableSet?.has(format(day, "yyyy-MM-dd"))
                 return (
                   <button
                     key={day.toISOString()}
@@ -117,7 +131,9 @@ export function DatePicker({ value, onChange, label, placeholder = "اختر ا�
                           ? "text-slate-300 cursor-not-allowed"
                           : outside
                             ? "text-slate-300 hover:bg-slate-50"
-                            : "text-slate-700 hover:bg-[#ff8c42]/10"
+                            : isAvailable
+                              ? "bg-emerald-50 text-emerald-700 font-bold ring-1 ring-emerald-200 hover:bg-emerald-100"
+                              : "text-slate-700 hover:bg-[#ff8c42]/10"
                     }`}
                   >
                     {format(day, "d")}
@@ -125,6 +141,19 @@ export function DatePicker({ value, onChange, label, placeholder = "اختر ا�
                 )
               })}
             </div>
+
+            {/* دليل أيام الرحلات (يظهر فقط عند توفّر البيانات أو أثناء جلبها) */}
+            {availabilityLoading ? (
+              <p className="flex items-center gap-2 text-[11px] text-slate-400 mt-3 px-1">
+                <span className="w-3 h-3 rounded-full border-2 border-emerald-300 border-t-transparent animate-spin shrink-0" />
+                جاري جلب أيام الرحلات من نظام الحجز...
+              </p>
+            ) : availableSet ? (
+              <p className="flex items-center gap-2 text-[11px] text-slate-500 mt-3 px-1">
+                <span className="w-3 h-3 rounded bg-emerald-100 ring-1 ring-emerald-300 shrink-0" />
+                الأيام الخضراء بها رحلات متاحة
+              </p>
+            ) : null}
           </div>
         )}
       </div>

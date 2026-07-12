@@ -52,6 +52,8 @@ export interface SearchParams {
   destination: string
   departureDate: string
   adults?: number
+  children?: number // 2–11 سنة
+  infants?: number // أقل من سنتين (في حضن بالغ)
 }
 
 export interface FlightSearchResponse {
@@ -161,12 +163,14 @@ export async function searchFlights(params: SearchParams): Promise<FlightSearchR
   const destination = params.destination?.trim().toUpperCase()
   const departureDate = params.departureDate?.trim()
   const adults = Math.max(1, Math.min(9, Number(params.adults) || 1))
+  const children = Math.max(0, Math.min(8, Number(params.children) || 0))
+  const infants = Math.max(0, Math.min(adults, Number(params.infants) || 0))
 
   if (!origin || !destination || !departureDate) {
     throw new Error("يرجى إدخال مطار المغادرة والوجهة وتاريخ السفر")
   }
 
-  const p: Required<SearchParams> = { origin, destination, departureDate, adults }
+  const p: Required<SearchParams> = { origin, destination, departureDate, adults, children, infants }
 
   // بلا موصّل → بيانات تجريبية سودانية
   if (!process.env.SUDAN_CONNECTOR_URL) {
@@ -181,5 +185,59 @@ export async function searchFlights(params: SearchParams): Promise<FlightSearchR
   return {
     data,
     meta: { source: "tti", currency: "SDG", ...(warnings.length ? { warnings } : {}) },
+  }
+}
+
+// ─── أيام توفّر الرحلات (التقويم الأخضر في نظام TTI) ─────────────────────────
+
+export interface AvailabilityResponse {
+  dates: string[] // YYYY-MM-DD
+  meta: { source: string; warnings?: string[] }
+}
+
+/**
+ * يجلب أيام الرحلات المتاحة لوجهة معيّنة من الموصّل (يقرأها الموصّل من
+ * التقويم الأخضر في محرّك حجز TTI). بلا موصّل → أيام تجريبية (يوم بعد يوم).
+ */
+export async function fetchFlightAvailability(origin: string, destination: string): Promise<AvailabilityResponse> {
+  const o = origin?.trim().toUpperCase()
+  const d = destination?.trim().toUpperCase()
+  if (!o || !d) throw new Error("يرجى تحديد مطار المغادرة والوجهة")
+
+  const url = process.env.SUDAN_CONNECTOR_URL
+  if (!url) {
+    // بيانات تجريبية: الأيام الفردية للتسعين يوماً القادمة
+    const dates: string[] = []
+    const day = new Date()
+    for (let i = 0; i < 90; i++) {
+      if (day.getDate() % 2 === 1)
+        dates.push(
+          `${day.getFullYear()}-${String(day.getMonth() + 1).padStart(2, "0")}-${String(day.getDate()).padStart(2, "0")}`,
+        )
+      day.setDate(day.getDate() + 1)
+    }
+    return { dates, meta: { source: "mock" } }
+  }
+
+  const controller = new AbortController()
+  const timeout = setTimeout(() => controller.abort(), 55000)
+  try {
+    const res = await fetch(
+      `${url.replace(/\/$/, "")}/availability?origin=${encodeURIComponent(o)}&destination=${encodeURIComponent(d)}`,
+      {
+        headers: { "x-connector-key": process.env.CONNECTOR_API_KEY ?? "" },
+        signal: controller.signal,
+      },
+    )
+    if (!res.ok) return { dates: [], meta: { source: "tti", warnings: [`connector: HTTP ${res.status}`] } }
+    const json = await res.json()
+    return { dates: (json?.dates as string[]) ?? [], meta: { source: "tti", warnings: json?.meta?.warnings ?? [] } }
+  } catch (e) {
+    return {
+      dates: [],
+      meta: { source: "tti", warnings: [`connector: ${e instanceof Error ? e.message : String(e)}`] },
+    }
+  } finally {
+    clearTimeout(timeout)
   }
 }
