@@ -81,7 +81,9 @@ export function normalizeRow(row, carrier) {
 }
 
 // ─── المسار الحقيقي: من كائن TTIModel.FlightListDisplay.ServerModel ─────────
-export function flightsFromServerModel(model, carrier) {
+// legInfo (اختياري): { origin, roundTrip } — عند بحث ذهاب وعودة نوسم كل رحلة:
+// تبدأ من المغادرة المطلوبة ⇒ "ذهاب"، غير ذلك ⇒ "عودة".
+export function flightsFromServerModel(model, carrier, legInfo) {
   if (!model) return []
   const airports = Object.fromEntries((model.DataReferenceAirports || []).map((a) => [a.DataId, a]))
   const fareRef = Object.fromEntries((model.DataReferenceFareBasis || []).map((f) => [f.DataId, f]))
@@ -166,6 +168,9 @@ export function flightsFromServerModel(model, carrier) {
 
       out.push({
         id: `tti_${carrier.code}_${first.flightNumber}_${first.departure.at}`,
+        ...(legInfo?.roundTrip
+          ? { leg: first.departure.iataCode === legInfo.origin ? "ذهاب" : "عودة" }
+          : {}),
         price: { total: sdgTotal(total), currency: "SDG" },
         // تفصيل السعر لكل فئة (يظهر عند تعدد الفئات: بالغ + طفل ...)
         priceBreakdown:

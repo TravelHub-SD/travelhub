@@ -196,14 +196,24 @@ async function setPaxCounts(frame, { adults = 1, children = 0, infants = 0 }) {
   return paxDebug
 }
 
-// تعبئة نموذج محرّك الحجز وتنفيذه (رحلة ذهاب فقط).
+// تحويل YYYY-MM-DD إلى صيغة المحرّك DD/MM/YYYY
+function toEngineDate(iso) {
+  const { d, m, y } = parseDate(iso)
+  return `${String(d).padStart(2, "0")}/${String(m).padStart(2, "0")}/${y}`
+}
+
+// تعبئة نموذج محرّك الحجز وتنفيذه.
+// عند وجود returnDate نستخدم وضع "Round trip" الأصلي في النظام —
+// بحث واحد يرجّع الاتجاهين معاً (نصف الحمل ونصف زمن الانتظار).
 async function runSearch(page, carrier, params) {
-  const { origin, destination, departureDate } = params
+  const { origin, destination, departureDate, returnDate } = params
   const frame = await getBookingFrame(page)
   rememberEngineBase(carrier, frame)
 
-  // نوع الرحلة: ذهاب فقط (افتراضي غالباً، لكن نؤكّده)
-  await frame.getByText("One way", { exact: true }).first().click().catch(() => {})
+  // نوع الرحلة حسب الطلب
+  const tripLabel = returnDate ? "Round trip" : "One way"
+  await frame.getByText(tripLabel, { exact: true }).first().click().catch(() => {})
+  await frame.waitForTimeout(400)
 
   // انتظر امتلاء قوائم المطارات
   await frame
@@ -214,9 +224,7 @@ async function runSearch(page, carrier, params) {
   await frame.waitForTimeout(600) // تُعاد تعبئة قائمة الوجهة حسب المغادرة
   await selectBookingAirport(frame, 1, destination) // الوجهة
 
-  // التاريخ DD/MM/YYYY
-  const { d, m, y } = parseDate(departureDate)
-  const dateStr = `${String(d).padStart(2, "0")}/${String(m).padStart(2, "0")}/${y}`
+  // تاريخ المغادرة DD/MM/YYYY
   await frame.evaluate((val) => {
     const el = document.querySelector("#CalendarID0")
     if (el) {
@@ -224,7 +232,26 @@ async function runSearch(page, carrier, params) {
       el.dispatchEvent(new Event("change", { bubbles: true }))
       el.dispatchEvent(new Event("blur", { bubbles: true }))
     }
-  }, dateStr)
+  }, toEngineDate(departureDate))
+
+  // تاريخ العودة (حقل العودة: DatePicker return أو CalendarID1 أو أي DatePicker آخر)
+  if (returnDate) {
+    await frame.waitForTimeout(300)
+    const retOk = await frame.evaluate((val) => {
+      const el =
+        document.querySelector("input.DatePicker.return") ||
+        document.querySelector("#CalendarID1") ||
+        Array.from(document.querySelectorAll("input.DatePicker")).find(
+          (e) => e.id !== "CalendarID0" && e.offsetParent !== null,
+        )
+      if (!el) return false
+      el.value = val
+      el.dispatchEvent(new Event("change", { bubbles: true }))
+      el.dispatchEvent(new Event("blur", { bubbles: true }))
+      return true
+    }, toEngineDate(returnDate))
+    if (!retOk) throw new Error("حقل تاريخ العودة غير موجود في المحرّك")
+  }
 
   // عدد الركاب (بالغون/أطفال/رضّع) من طلب الموقع
   const paxDebug = await setPaxCounts(frame, params)
@@ -240,7 +267,7 @@ async function runSearch(page, carrier, params) {
 
 // قراءة نتائج البحث من كائن Knockout المضمّن في صفحة النتائج
 // (TTIModel.FlightListDisplay.ServerModel) بدل كشط DOM — أدقّ وأثبت.
-async function readResults(page, carrier) {
+async function readResults(page, carrier, params) {
   const frame = page.frame({ name: "mainFrame" })
   if (!frame) return []
 
@@ -283,7 +310,11 @@ async function readResults(page, carrier) {
     } catch {}
     return { flights: [], debug: `لا ServerModel —${extra}` }
   }
-  const flights = flightsFromServerModel(model, carrier)
+  const flights = flightsFromServerModel(
+    model,
+    carrier,
+    params?.returnDate ? { origin: params.origin, roundTrip: true } : undefined,
+  )
   let debug = null
   if (!flights.length) {
     // شكل البيانات لتشخيص حالات الصفر (مثلاً بحث فيه طفل)
@@ -442,7 +473,7 @@ export async function searchCarrier(carrier, params) {
     const res = await getLoggedInPage(carrier, login)
     page = res.page
     const paxDebug = await runSearch(page, carrier, params)
-    const { flights, debug } = await readResults(page, carrier)
+    const { flights, debug } = await readResults(page, carrier, params)
     return { carrier: carrier.name, flights, error: debug ? `${debug} | ركاب: ${paxDebug || "?"}` : null }
   } catch (err) {
     await invalidateSession(carrier.code) // جلسة قد تكون انتهت — أعِد الدخول لاحقاً

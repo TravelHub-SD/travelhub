@@ -214,17 +214,25 @@ async function doSearch({ origin, destination, departureDate, returnDate, adults
   }
 
   const run = (async () => {
-    // بحث فعلي: كل الخطوط بالتوازي، وعند الذهاب والعودة كلا الاتجاهين بالتوازي
-    const tasks = []
-    for (const c of config.carriers) {
-      tasks.push(searchCarrier(c, outParams).then((r) => ({ ...r, leg: retParams ? "ذهاب" : null })))
-      if (retParams) tasks.push(searchCarrier(c, retParams).then((r) => ({ ...r, leg: "عودة" })))
+    // بحث فعلي: وضع "Round trip" الأصلي في النظام — بحث واحد لكل خط
+    // يرجّع الاتجاهين معاً (التطبيع يوسم كل رحلة ذهاب/عودة تلقائياً).
+    const nativeParams = retParams ? { ...outParams, returnDate: retParams.departureDate } : outParams
+    const results = await Promise.all(config.carriers.map((c) => searchCarrier(c, nativeParams)))
+    const data = results.flatMap((r) => r.flights)
+    const warnings = results.filter((r) => r.error).map((r) => `${r.carrier}: ${r.error}`)
+
+    // شبكة أمان: لو البحث الموحّد ما رجّع رحلات عودة، نكمّلها ببحث الاتجاه المعاكس
+    if (retParams && data.length && !data.some((f) => f.leg === "عودة")) {
+      warnings.push("العودة لم تُقرأ من البحث الموحّد — نُفّذ بحث الاتجاه المعاكس احتياطاً")
+      const backResults = await Promise.all(config.carriers.map((c) => searchCarrier(c, retParams)))
+      for (const r of backResults) {
+        data.push(...r.flights.map((f) => ({ ...f, leg: "عودة" })))
+        if (r.error) warnings.push(`${r.carrier} (عودة): ${r.error}`)
+      }
+      data.forEach((f) => {
+        if (!f.leg) f.leg = "ذهاب"
+      })
     }
-    const results = await Promise.all(tasks)
-    const data = results.flatMap((r) => (r.leg ? r.flights.map((f) => ({ ...f, leg: r.leg })) : r.flights))
-    const warnings = results
-      .filter((r) => r.error)
-      .map((r) => `${r.carrier}${r.leg ? ` (${r.leg})` : ""}: ${r.error}`)
     data.sort((a, b) => Number(a.price.total) - Number(b.price.total))
 
     const payload = { data, meta: { source: "tti", carriers: config.carriers.map((c) => c.name), warnings } }
