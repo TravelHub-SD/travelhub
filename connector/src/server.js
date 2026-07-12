@@ -3,6 +3,7 @@
 // أتمتة بوابة TTI، وتدمج النتائج وترجّعها بشكل موقع TravelHub.
 // ─────────────────────────────────────────────────────────────
 import express from "express"
+import { timingSafeEqual } from "node:crypto"
 import { config } from "./config.js"
 import { cacheGet, cacheSet } from "./cache.js"
 import { searchCarrier, listCarrierAirports, inspectBooking, getCarrierAvailability } from "./tti.js"
@@ -10,21 +11,49 @@ import { mockCarrierFlights } from "./mock.js"
 import { shutdownBrowser } from "./browser.js"
 
 const app = express()
-app.use(express.json())
+app.disable("x-powered-by") // إخفاء بصمة Express
+app.set("trust proxy", 1) // عنوان العميل الصحيح خلف بروكسي Railway
+app.use(express.json({ limit: "8kb" })) // حد حجم الجسم
 
-// حماية بسيطة بمفتاح مشترك: عبر هيدر x-connector-key (للموقع)
-// أو عبر ?key= في الرابط (لتسهيل الاختبار من المتصفح).
+// مقارنة مفاتيح آمنة توقيتياً (تمنع هجمات التوقيت)
+function safeKeyEqual(a, b) {
+  const A = Buffer.from(String(a || ""))
+  const B = Buffer.from(String(b || ""))
+  return A.length === B.length && timingSafeEqual(A, B)
+}
+
+// حد معدّل بسيط في الذاكرة لكل عنوان
+const rlBuckets = new Map()
+function rateLimited(ip, limit, windowMs) {
+  const now = Date.now()
+  if (rlBuckets.size > 10_000) {
+    for (const [k, b] of rlBuckets) if (now - b.t > windowMs) rlBuckets.delete(k)
+  }
+  const b = rlBuckets.get(ip)
+  if (!b || now - b.t > windowMs) {
+    rlBuckets.set(ip, { n: 1, t: now })
+    return false
+  }
+  if (b.n >= limit) return true
+  b.n++
+  return false
+}
+
+// حماية بمفتاح مشترك عبر هيدر x-connector-key فقط
+// (لا ?key= في الرابط — الروابط تتسرّب إلى السجلات).
 app.use((req, res, next) => {
-  if (req.path === "/health") return next()
-  const provided = req.get("x-connector-key") || req.query.key
-  if (config.apiKey && provided !== config.apiKey) {
+  if (rateLimited(req.ip, 120, 60_000)) return res.status(429).json({ error: "too many requests" })
+  if (req.path === "/health") return next() // لفحص الجاهزية من منصة الاستضافة
+  const provided = req.get("x-connector-key")
+  if (config.apiKey && !safeKeyEqual(provided, config.apiKey)) {
     return res.status(401).json({ error: "unauthorized" })
   }
   next()
 })
 
+// فحص جاهزية أدنى — بلا أي معلومات داخلية
 app.get("/health", (_req, res) => {
-  res.json({ ok: true, carriers: config.carriers.map((c) => c.name), mock: config.mock })
+  res.json({ ok: true })
 })
 
 // ─── مطارات النظام (للقوائم المنسدلة في الموقع) ───────────────────────────────
@@ -110,13 +139,14 @@ app.get("/availability", async (req, res) => {
   res.json(payload)
 })
 
-// أداة فحص مؤقتة — عناصر الركاب + بنية التقويم من المحرّك الفعلي.
+// أداة فحص تشخيصية — معطّلة افتراضياً؛ فعّلها مؤقتاً بمتغيّر البيئة INSPECT_ENABLED=1
 app.get("/inspect", async (_req, res) => {
+  if (process.env.INSPECT_ENABLED !== "1") return res.status(404).json({ error: "not found" })
   if (config.mock || config.carriers.length === 0) return res.json({ mock: true })
   try {
     res.json(await inspectBooking(config.carriers[0]))
   } catch (e) {
-    res.status(500).json({ error: e?.message || String(e) })
+    res.status(500).json({ error: "inspect failed" })
   }
 })
 
@@ -135,8 +165,15 @@ async function doSearch({ origin, destination, departureDate, adults, children, 
   children = Math.max(0, Math.min(8, Number(children) || 0))
   infants = Math.max(0, Math.min(adults, Number(infants) || 0))
 
-  if (!origin || !destination || !departureDate) {
-    return { status: 400, body: { error: "origin, destination, departureDate مطلوبة" } }
+  // تحقق صارم من الشكل — يمنع تمرير أي مدخلات غريبة إلى الأتمتة
+  if (
+    !/^[A-Z]{3}$/.test(origin) ||
+    !/^[A-Z]{3}$/.test(destination) ||
+    origin === destination ||
+    !/^\d{4}-\d{2}-\d{2}$/.test(departureDate) ||
+    Number.isNaN(new Date(`${departureDate}T00:00:00Z`).getTime())
+  ) {
+    return { status: 400, body: { error: "معاملات غير صالحة" } }
   }
 
   const params = { origin, destination, departureDate, adults, children, infants }
@@ -178,6 +215,16 @@ app.get("/search", async (req, res) => {
 })
 
 // 0.0.0.0 مطلوب على منصّات الحاويات (Railway) لتصل الطلبات الخارجية.
+// مسارات غير معروفة: 404 موحّد بلا أي تفاصيل (يصعّب رسم خريطة الخدمة)
+app.use((_req, res) => res.status(404).json({ error: "not found" }))
+
+// معالج أخطاء عام: لا نسرّب stack أو رسائل داخلية
+// eslint-disable-next-line no-unused-vars
+app.use((err, _req, res, _next) => {
+  console.error("[server]", err?.message || err)
+  res.status(500).json({ error: "server error" })
+})
+
 const server = app.listen(config.port, "0.0.0.0", () => {
   console.log(`[tti-connector] يعمل على المنفذ ${config.port} — الخطوط: ${config.carriers.map((c) => c.name).join(", ") || "(mock)"}`)
   // تسخين قائمة المطارات في الخلفية لتكون جاهزة عند أول طلب من الموقع.

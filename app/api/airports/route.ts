@@ -1,4 +1,6 @@
 import { NextResponse } from "next/server"
+import { rateLimit, tooMany } from "@/lib/rate-limit"
+import { headers } from "next/headers"
 
 // قائمة احتياطية سودانية لو الموصّل غير مضبوط (بيئة التطوير مثلاً).
 const FALLBACK = [
@@ -17,10 +19,15 @@ const FALLBACK = [
   { code: "JUB", name: "Juba" },
 ]
 
-// قائمة مطارات النظام للقوائم المنسدلة — تُخزَّن مؤقتاً على الحافة.
-export const revalidate = 3600
+// قائمة مطارات النظام للقوائم المنسدلة — نداء الموصّل نفسه مُخزَّن مؤقتاً ساعة.
+export const dynamic = "force-dynamic"
 
 export async function GET() {
+  const h = await headers()
+  const ip = (h.get("x-forwarded-for") || "").split(",")[0].trim() || "anon"
+  if (!rateLimit(`ap:${ip}`, 30, 60_000)) {
+    return NextResponse.json(tooMany, { status: 429 })
+  }
   const url = process.env.SUDAN_CONNECTOR_URL
   if (!url) return NextResponse.json({ airports: FALLBACK })
 

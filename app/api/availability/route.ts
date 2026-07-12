@@ -1,4 +1,5 @@
 import { type NextRequest, NextResponse } from "next/server"
+import { rateLimit, clientIp, tooMany } from "@/lib/rate-limit"
 
 // أيام الإتاحة (الأيام الخضراء) — وسيط لنقطة /availability في الموصّل.
 export const dynamic = "force-dynamic"
@@ -22,8 +23,18 @@ export async function GET(request: NextRequest) {
   const start = sp.get("start") || ""
   const end = sp.get("end") || ""
 
-  if (!/^[A-Z]{3}$/.test(origin) || !/^[A-Z]{3}$/.test(destination) || !start || !end) {
-    return NextResponse.json({ error: "origin, destination, start, end مطلوبة" }, { status: 400 })
+  if (!rateLimit(`av:${clientIp(request.headers)}`, 30, 60_000)) {
+    return NextResponse.json(tooMany, { status: 429 })
+  }
+
+  const DATE = /^\d{4}-\d{2}-\d{2}$/
+  if (!/^[A-Z]{3}$/.test(origin) || !/^[A-Z]{3}$/.test(destination) || !DATE.test(start) || !DATE.test(end)) {
+    return NextResponse.json({ error: "معاملات غير صالحة" }, { status: 400 })
+  }
+  // سقف النطاق: شهران كحد أقصى — يمنع استنزاف الموصّل بطلبات واسعة
+  const span = (new Date(end).getTime() - new Date(start).getTime()) / 86_400_000
+  if (!(span >= 0 && span <= 62)) {
+    return NextResponse.json({ error: "معاملات غير صالحة" }, { status: 400 })
   }
 
   const url = process.env.SUDAN_CONNECTOR_URL

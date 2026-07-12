@@ -1,32 +1,49 @@
 import { type NextRequest, NextResponse } from "next/server"
 import { searchFlights } from "@/lib/flightService"
+import { rateLimit, clientIp, tooMany } from "@/lib/rate-limit"
+
+const IATA = /^[A-Z]{3}$/
+const DATE = /^\d{4}-\d{2}-\d{2}$/
+
+function validDate(s: string): boolean {
+  if (!DATE.test(s)) return false
+  const d = new Date(`${s}T00:00:00Z`)
+  if (Number.isNaN(d.getTime())) return false
+  const today = new Date()
+  today.setUTCHours(0, 0, 0, 0)
+  const max = new Date(today)
+  max.setUTCFullYear(max.getUTCFullYear() + 1)
+  return d >= today && d <= max
+}
 
 export async function POST(request: NextRequest) {
-  try {
-    const body = await request.json()
-    const { origin, destination, departureDate, adults = 1, children = 0, infants = 0 } = body
+  // حد المعدّل: 10 عمليات بحث بالدقيقة لكل عنوان (البحث الحقيقي مكلف)
+  if (!rateLimit(`fs:${clientIp(request.headers)}`, 10, 60_000)) {
+    return NextResponse.json(tooMany, { status: 429 })
+  }
 
-    if (!origin || !destination || !departureDate) {
-      return NextResponse.json({ error: "يرجى إدخال جميع الحقول المطلوبة" }, { status: 400 })
+  try {
+    const body = await request.json().catch(() => null)
+    if (!body || typeof body !== "object") {
+      return NextResponse.json({ error: "طلب غير صالح" }, { status: 400 })
     }
 
-    console.log("[travelhub] Searching flights:", { origin, destination, departureDate, adults, children, infants })
+    const origin = String(body.origin || "").trim().toUpperCase()
+    const destination = String(body.destination || "").trim().toUpperCase()
+    const departureDate = String(body.departureDate || "").trim()
+    const adults = Math.max(1, Math.min(9, Number(body.adults) || 1))
+    const children = Math.max(0, Math.min(8, Number(body.children) || 0))
+    const infants = Math.max(0, Math.min(adults, Number(body.infants) || 0))
 
-    const result = await searchFlights({
-      origin,
-      destination,
-      departureDate,
-      adults: Number(adults),
-      children: Number(children),
-      infants: Number(infants),
-    })
+    if (!IATA.test(origin) || !IATA.test(destination) || origin === destination || !validDate(departureDate)) {
+      return NextResponse.json({ error: "يرجى إدخال بيانات بحث صحيحة" }, { status: 400 })
+    }
 
-    console.log("[travelhub] Flights found:", result.data.length, "source:", result.meta.source)
-
+    const result = await searchFlights({ origin, destination, departureDate, adults, children, infants })
     return NextResponse.json(result)
   } catch (error) {
-    console.error("[travelhub] Error searching flights:", error)
-    const message = error instanceof Error ? error.message : "حدث خطأ أثناء البحث عن الرحلات"
-    return NextResponse.json({ error: message }, { status: 500 })
+    // لا نسرّب تفاصيل داخلية للعميل — التفاصيل في سجلات الخادم فقط
+    console.error("[travelhub] flight search error:", error)
+    return NextResponse.json({ error: "حدث خطأ أثناء البحث عن الرحلات" }, { status: 500 })
   }
 }
