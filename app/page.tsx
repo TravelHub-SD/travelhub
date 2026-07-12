@@ -1017,7 +1017,7 @@ export default function Home() {
                                 <p className="text-3xl font-extrabold text-[#ff8c42] leading-none">
                                   {priceSdg} <span className="text-lg font-bold">ج.س</span>
                                 </p>
-                                <p className="text-xs text-slate-400 mt-1">للشخص الواحد · شامل الضرائب</p>
+                                <p className="text-xs text-slate-400 mt-1">سعر البالغ الواحد · شامل الضرائب</p>
                               </div>
                               <Button
                                 className="w-full bg-[#25D366] hover:bg-[#20BA5A] text-white flex items-center justify-center gap-2 rounded-xl h-11 font-bold shadow-md shadow-green-500/20"

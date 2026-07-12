@@ -123,8 +123,37 @@ export async function getCarrierAvailability(carrier, { origin, destination, sta
   }
 }
 
+// ضبط عدد الركاب (بالغون/أطفال/رضّع) — الحقول الثلاثة المرتبطة بـ
+// getSetTravelerCount بالترتيب، نضغط أزرار +/− الخاصة بها (Knockout) حتى نبلغ العدد.
+async function setPaxCounts(frame, { adults = 1, children = 0, infants = 0 }) {
+  await frame.evaluate(
+    ({ targets }) => {
+      const inputs = Array.from(
+        document.querySelectorAll('input[data-bind*="getSetTravelerCount"]'),
+      ).slice(0, 3)
+      inputs.forEach((input, i) => {
+        const group = input.closest(".input-group")
+        if (!group) return
+        const btns = Array.from(group.querySelectorAll("button"))
+        const plus = btns.find((b) => b.querySelector(".glyphicon-plus"))
+        const minus = btns.find((b) => b.querySelector(".glyphicon-minus"))
+        const want = targets[i]
+        for (let g = 0; g < 15; g++) {
+          const cur = Number(input.value) || 0
+          if (cur === want) break
+          if (cur < want) plus?.click()
+          else minus?.click()
+        }
+      })
+    },
+    { targets: [Math.max(1, Number(adults) || 1), Math.max(0, Number(children) || 0), Math.max(0, Number(infants) || 0)] },
+  )
+  await frame.waitForTimeout(300)
+}
+
 // تعبئة نموذج محرّك الحجز وتنفيذه (رحلة ذهاب فقط).
-async function runSearch(page, carrier, { origin, destination, departureDate }) {
+async function runSearch(page, carrier, params) {
+  const { origin, destination, departureDate } = params
   const frame = await getBookingFrame(page)
   rememberEngineBase(carrier, frame)
 
@@ -151,6 +180,9 @@ async function runSearch(page, carrier, { origin, destination, departureDate }) 
       el.dispatchEvent(new Event("blur", { bubbles: true }))
     }
   }, dateStr)
+
+  // عدد الركاب (بالغون/أطفال/رضّع) من طلب الموقع
+  await setPaxCounts(frame, params)
 
   // إرسال البحث
   await frame
