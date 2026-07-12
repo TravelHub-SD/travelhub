@@ -58,6 +58,19 @@ const PHONE_NUMBER = "249114610204"
 const WHATSAPP_NUMBER = "249960278594"
 // رابط قروب الواتساب الخاص بالعروض
 const WHATSAPP_GROUP_LINK = "https://chat.whatsapp.com/GGxhWOBUsXgJr98kbB1DmD"
+
+// أكواد فئات الركاب في نظام الحجز → التسمية العربية وخانة العدد في نموذج البحث
+const PAX_TYPE_INFO: Record<string, { label: string; key: "adults" | "children" | "infants" }> = {
+  ADT: { label: "البالغ", key: "adults" },
+  AD: { label: "البالغ", key: "adults" },
+  ADULT: { label: "البالغ", key: "adults" },
+  CHD: { label: "الطفل", key: "children" },
+  CH: { label: "الطفل", key: "children" },
+  CHILD: { label: "الطفل", key: "children" },
+  INF: { label: "الرضيع", key: "infants" },
+  IN: { label: "الرضيع", key: "infants" },
+  INFANT: { label: "الرضيع", key: "infants" },
+}
 const EMAIL = "travelhub.sd@gmail.com"
 
 const formatPrice = (usdPrice: string) => {
@@ -1033,6 +1046,26 @@ export default function Home() {
                             {/* Price + CTA */}
                             <div className="bg-slate-50/70 border-t lg:border-t-0 lg:border-r border-slate-100 p-5 md:p-6 flex flex-col justify-center lg:min-w-[240px]">
                               <div className="text-center lg:text-right mb-3">
+                                {/* تفصيل السعر لكل فئة (شفافية: بالغ / طفل / رضيع) */}
+                                {flight.priceBreakdown?.length > 1 && (
+                                  <div className="mb-2.5 pb-2.5 border-b border-slate-200/70 space-y-1 text-xs">
+                                    {flight.priceBreakdown.map((b: any) => {
+                                      const info = PAX_TYPE_INFO[String(b.type || "").toUpperCase()]
+                                      const count = info ? Number(flightForm[info.key]) || 0 : 0
+                                      return (
+                                        <div key={b.type} className="flex items-center justify-between gap-3 text-slate-500">
+                                          <span>
+                                            {info?.label || b.type}
+                                            {count > 0 ? ` ×${count}` : ""}
+                                          </span>
+                                          <span className="font-bold text-slate-600" dir="ltr">
+                                            {fmtSDG(b.total)} ج.س
+                                          </span>
+                                        </div>
+                                      )
+                                    })}
+                                  </div>
+                                )}
                                 <p className="text-3xl font-extrabold text-[#ff8c42] leading-none">
                                   {priceSdg} <span className="text-lg font-bold">ج.س</span>
                                 </p>

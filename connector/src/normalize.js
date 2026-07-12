@@ -99,6 +99,7 @@ export function flightsFromServerModel(model, carrier) {
       let refundable = false
       let seats = null
       let cabinCode = ""
+      const typeTotals = new Map() // كود الفئة (ADT/CHD/INF) → مجموع أرخص أجورها عبر المقاطع
 
       const segments = segs.map((seg) => {
         // السعر = مجموع أرخص أجرة لكل فئة ركاب (بالغ + طفل + رضيع) — يطابق
@@ -107,7 +108,8 @@ export function flightsFromServerModel(model, carrier) {
         if (!paxTypes.length) {
           ok = false
         }
-        for (const pt of paxTypes) {
+        for (let ti = 0; ti < paxTypes.length; ti++) {
+          const pt = paxTypes[ti]
           const fares = pt?.FareBasisList || []
           const cheapest = fares.reduce(
             (min, f) => (!min || f.Amount.TotalAmount < min.Amount.TotalAmount ? f : min),
@@ -118,6 +120,8 @@ export function flightsFromServerModel(model, carrier) {
             continue
           }
           total += cheapest.Amount.TotalAmount
+          const tKey = pt.Code || pt.PaxType || ["ADT", "CHD", "INF"][ti] || `T${ti}`
+          typeTotals.set(tKey, (typeTotals.get(tKey) || 0) + cheapest.Amount.TotalAmount)
           // بيانات العرض (أمتعة/استرجاع/مقاعد/درجة) من فئة البالغين — وهي الأولى غالباً
           if (pt === paxTypes[0]) {
             bagKg = Math.max(bagKg, cheapest.BagAllowance?.CheckedAllowance?.BagWeight || 0)
@@ -163,6 +167,11 @@ export function flightsFromServerModel(model, carrier) {
       out.push({
         id: `tti_${carrier.code}_${first.flightNumber}_${first.departure.at}`,
         price: { total: sdgTotal(total), currency: "SDG" },
+        // تفصيل السعر لكل فئة (يظهر عند تعدد الفئات: بالغ + طفل ...)
+        priceBreakdown:
+          typeTotals.size > 1
+            ? Array.from(typeTotals, ([type, amt]) => ({ type, total: sdgTotal(amt) }))
+            : undefined,
         numberOfBookableSeats: seats,
         airlineLogo: KIWI_LOGO(first.carrierCode),
         cabinClass: cabin,
