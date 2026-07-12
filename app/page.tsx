@@ -660,6 +660,21 @@ export default function Home() {
             )}
           </div>
 
+          {/* لا نتائج + تحذيرات تشخيصية */}
+          {activeTab === "flights" && searchResults.data && searchResults.data.length === 0 && (
+            <div className="bg-amber-50 border border-amber-200 rounded-2xl p-6 text-center">
+              <p className="font-bold text-amber-800 mb-1">لم نعثر على رحلات لهذا البحث</p>
+              <p className="text-sm text-amber-700">جرّب تاريخاً آخر (الأيام الخضراء في التقويم) أو عدّل عدد المسافرين.</p>
+              {searchResults?.meta?.warnings?.length > 0 && (
+                <div className="mt-4 text-right bg-white/60 rounded-xl p-3 text-xs text-slate-500 space-y-1 overflow-x-auto">
+                  {searchResults.meta.warnings.map((w: string, i: number) => (
+                    <p key={i} className="whitespace-pre-wrap break-words">⚠️ {w}</p>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+
           {/* Flights */}
           {activeTab === "flights" && searchResults.data && searchResults.data.length > 0 && (() => {
             const fmtTime = (t: string) =>

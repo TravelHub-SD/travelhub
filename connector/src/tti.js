@@ -148,7 +148,28 @@ async function setPaxCounts(frame, { adults = 1, children = 0, infants = 0 }) {
     },
     { targets: [Math.max(1, Number(adults) || 1), Math.max(0, Number(children) || 0), Math.max(0, Number(infants) || 0)] },
   )
-  await frame.waitForTimeout(300)
+  await frame.waitForTimeout(400)
+
+  // بعض الإعدادات تُظهر قائمة "عمر الطفل" لكل طفل مُضاف — لو ظهرت قائمة
+  // فارغة قرب عدّادات الركاب نختار قيمة وسطى (وإلا يرفض المحرّك البحث بصمت).
+  await frame.evaluate(() => {
+    const inputs = Array.from(document.querySelectorAll('input[data-bind*="getSetTravelerCount"]')).slice(0, 3)
+    for (const inp of inputs) {
+      let scope = inp
+      for (let i = 0; i < 4 && scope.parentElement; i++) scope = scope.parentElement
+      scope.querySelectorAll("select").forEach((sel) => {
+        if (sel.offsetParent === null) return // مخفي
+        if (sel.value === "" || sel.value === "-1" || sel.value == null || sel.selectedIndex < 0) {
+          const opts = Array.from(sel.options).filter((o) => o.value !== "" && o.value !== "-1")
+          if (opts.length) {
+            sel.value = opts[Math.floor(opts.length / 2)].value
+            sel.dispatchEvent(new Event("change", { bubbles: true }))
+          }
+        }
+      })
+    }
+  })
+  await frame.waitForTimeout(200)
 }
 
 // تعبئة نموذج محرّك الحجز وتنفيذه (رحلة ذهاب فقط).
@@ -215,7 +236,27 @@ async function readResults(page, carrier) {
     })
     .catch(() => null)
 
-  if (!model) return { flights: [], debug: "لا ServerModel (لم تُحمَّل صفحة النتائج؟)" }
+  if (!model) {
+    // اجمع أدلة: أين نحن؟ وهل يعرض المحرّك رسالة خطأ/تنبيه؟
+    let extra = ""
+    try {
+      const path = frame.url().split("/BookingEngine/")[1] || frame.url()
+      extra = ` صفحة=${path.split("?")[0]}`
+      const note = await frame.evaluate(() => {
+        const texts = []
+        for (const sel of [".modal.in", ".modal.show", "#AlertModal", "#TTINotifications", ".alert", ".validation-summary-errors"]) {
+          const el = document.querySelector(sel)
+          if (el && el.offsetParent !== null) {
+            const t = (el.textContent || "").trim().replace(/\s+/g, " ")
+            if (t) texts.push(t)
+          }
+        }
+        return texts.join(" | ").slice(0, 250)
+      })
+      if (note) extra += ` رسالة="${note}"`
+    } catch {}
+    return { flights: [], debug: `لا ServerModel —${extra}` }
+  }
   const flights = flightsFromServerModel(model, carrier)
   let debug = null
   if (!flights.length) {
