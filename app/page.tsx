@@ -910,10 +910,10 @@ export default function Home() {
                   )}
 
                 {/* Results list */}
-                <div className="space-y-4">
+                <div className="space-y-4 min-w-0">
                   {/* شريط الفرز + زر الفلاتر (موبايل) */}
-                  <div className="flex items-center gap-2 sticky top-[120px] z-20 py-2 bg-slate-50/95 backdrop-blur-sm rounded-full lg:static lg:py-0 lg:bg-transparent">
-                    <div className="flex-1 overflow-x-auto no-scrollbar">
+                  <div className="flex items-center gap-2 min-w-0 sticky top-[120px] z-20 py-2 bg-slate-50/95 backdrop-blur-sm rounded-full lg:static lg:py-0 lg:bg-transparent">
+                    <div className="flex-1 min-w-0 overflow-x-auto no-scrollbar">
                       <div className="inline-flex gap-1 bg-slate-100 p-1 rounded-full">
                         {sortTabs.map((t) => (
                           <button
@@ -960,7 +960,7 @@ export default function Home() {
                     const gMinPrice = items.length ? Math.min(...items.map((x: any) => x.price)) : 0
                     const gMinDur = items.length ? Math.min(...items.map((x: any) => x.dur)) : 0
                     return (
-                      <div key={group.label || "all"} className="space-y-4">
+                      <div key={group.label || "all"} className="space-y-4 min-w-0">
                         {group.label && (
                           <div className="flex items-center gap-2 pt-3">
                             <span className={`w-8 h-8 rounded-lg bg-[#1e3a5f] flex items-center justify-center ${group.label === "رحلات العودة" ? "-scale-x-100" : ""}`}>
@@ -1019,6 +1019,10 @@ export default function Home() {
                                       <img
                                         src={logoFor(c) || "/placeholder.svg"}
                                         alt={getAirlineName(c, language)}
+                                        width={32}
+                                        height={32}
+                                        loading="eager"
+                                        decoding="async"
                                         className="w-8 h-8 object-contain"
                                         onError={(e) => ((e.target as HTMLImageElement).src = "/abstract-airline-logo.png")}
                                       />
@@ -1226,7 +1230,7 @@ export default function Home() {
 
         return (
           <div
-            className="fixed inset-0 z-[100] flex items-end md:items-center justify-center bg-black/50 backdrop-blur-sm p-0 md:p-4 animate-rise"
+            className="fixed inset-0 z-[160] flex items-end md:items-center justify-center bg-black/50 backdrop-blur-sm p-0 md:p-4 animate-rise"
             onClick={() => setSelectedFlight(null)}
           >
             <div
@@ -1261,8 +1265,12 @@ export default function Home() {
                       <div className="flex items-center gap-3 mb-3">
                         <div className="w-10 h-10 rounded-lg bg-slate-50 border border-slate-100 flex items-center justify-center overflow-hidden">
                           <img
-                            src={seg.logo || getAirlineLogo(seg.carrierCode)}
+                            src={getAirlineLogo(seg.carrierCode)}
                             alt={seg.carrierName}
+                            width={28}
+                            height={28}
+                            loading="eager"
+                            decoding="async"
                             className="w-7 h-7 object-contain"
                             onError={(e) => ((e.target as HTMLImageElement).src = "/abstract-airline-logo.png")}
                           />
@@ -1690,8 +1698,12 @@ export default function Home() {
         <ArrowUp className="w-5 h-5" />
       </button>
 
-      {/* ─── Bottom navigation (تطبيقي — للموبايل فقط) ─── */}
-      <nav className="lg:hidden fixed bottom-0 inset-x-0 z-[120] bg-white/95 backdrop-blur-md border-t border-slate-100 shadow-[0_-4px_20px_rgba(0,0,0,0.06)] pb-[env(safe-area-inset-bottom)]">
+      {/* ─── Bottom navigation (تطبيقي — للموبايل فقط، يُخفى عند فتح نافذة) ─── */}
+      <nav
+        className={`lg:hidden fixed bottom-0 inset-x-0 z-[120] bg-white/95 backdrop-blur-md border-t border-slate-100 shadow-[0_-4px_20px_rgba(0,0,0,0.06)] pb-[env(safe-area-inset-bottom)] ${
+          selectedFlight || filtersOpen || isLoading ? "hidden" : ""
+        }`}
+      >
         <div className="grid grid-cols-5 items-end h-16">
           {[
             { icon: HomeIcon, label: "الرئيسية", onClick: () => scrollToTop() },
