@@ -52,6 +52,7 @@ import { AirportSelect } from "@/components/airport-select"
 import { DatePicker } from "@/components/date-picker"
 import { PassengerSelect } from "@/components/passenger-select"
 import { getAirlineName, getAirlineLogo } from "@/lib/airlines"
+import { airportLabel, airportNameAr } from "@/lib/airports"
 
 const EXCHANGE_RATE = 3650 // سعر الدولار مقابل الجنيه السوداني
 const PHONE_NUMBER = "249114610204"
@@ -573,10 +574,10 @@ export default function Home() {
         >
           <div className="bg-white rounded-3xl shadow-float p-8 md:p-10 text-center max-w-md w-full animate-rise">
             {/* المسار */}
-            <div className="flex items-center justify-center gap-3 text-2xl md:text-3xl font-extrabold text-[#1e3a5f]">
-              <span>{flightForm.origin || "—"}</span>
+            <div className="flex items-center justify-center gap-3 text-xl md:text-2xl font-extrabold text-[#1e3a5f]">
+              <span>{airportLabel(flightForm.origin) || "—"}</span>
               <Plane className="w-6 h-6 text-[#ff8c42] -rotate-45" />
-              <span>{flightForm.destination || "—"}</span>
+              <span>{airportLabel(flightForm.destination) || "—"}</span>
             </div>
             <p className="text-slate-500 text-sm mt-2">
               {flightForm.departureDate && <span dir="ltr">{flightForm.departureDate}</span>}
@@ -623,9 +624,9 @@ export default function Home() {
               </div>
               {activeTab === "flights" ? (
                 <div className="flex items-center gap-2 flex-wrap text-sm leading-none">
-                  <span className="font-extrabold text-[#1e3a5f]">{flightForm.origin || "—"}</span>
+                  <span className="font-extrabold text-[#1e3a5f]">{airportLabel(flightForm.origin) || "—"}</span>
                   <ArrowLeftRight className="w-4 h-4 text-[#ff8c42] shrink-0" />
-                  <span className="font-extrabold text-[#1e3a5f]">{flightForm.destination || "—"}</span>
+                  <span className="font-extrabold text-[#1e3a5f]">{airportLabel(flightForm.destination) || "—"}</span>
                   {flightForm.departureDate && (
                     <>
                       <span className="text-slate-300 hidden sm:inline">•</span>
@@ -737,12 +738,12 @@ export default function Home() {
               ? [
                   {
                     label: "رحلات الذهاب",
-                    route: `${flightForm.origin} ← ${flightForm.destination}`,
+                    route: `${airportLabel(flightForm.origin)} ← ${airportLabel(flightForm.destination)}`,
                     items: filtered.filter((x: any) => x.flight.leg === "ذهاب"),
                   },
                   {
                     label: "رحلات العودة",
-                    route: `${flightForm.destination} ← ${flightForm.origin}`,
+                    route: `${airportLabel(flightForm.destination)} ← ${airportLabel(flightForm.origin)}`,
                     items: filtered.filter((x: any) => x.flight.leg === "عودة"),
                   },
                 ].filter((g) => g.items.length)
@@ -967,9 +968,7 @@ export default function Home() {
                               <Plane className="w-4 h-4 text-white -rotate-45" />
                             </span>
                             <h4 className="font-bold text-[#1e3a5f] text-lg">{group.label}</h4>
-                            <span className="text-sm font-semibold text-slate-400" dir="ltr">
-                              {group.route}
-                            </span>
+                            <span className="text-sm font-semibold text-slate-400">{group.route}</span>
                           </div>
                         )}
                         {items.map(({ flight, index, price, dur, stops }: any) => {
@@ -981,7 +980,7 @@ export default function Home() {
                     // اللوغو المحلي الرسمي أولاً (تاركو/بدر)، ثم لوغو الموصّل، ثم kiwi
                     const logoFor = (code: string) => getAirlineLogo(code)
                     const airlineNames = carriers.map((c) => getAirlineName(c, language)).join("، ")
-                    const stopCities = segments.slice(0, -1).map((s: any) => s.arrival.iataCode)
+                    const stopCities = segments.slice(0, -1).map((s: any) => airportNameAr(s.arrival.iataCode))
                     const offset = dayOffset(first.departure.at, last.arrival.at)
                     const isCheapest = price === gMinPrice
                     const isFastest = dur === gMinDur
@@ -1040,7 +1039,7 @@ export default function Home() {
                               <div className="flex items-center gap-4">
                                 <div className="text-center min-w-[68px]">
                                   <p className="text-2xl font-extrabold text-[#1e3a5f] tracking-tight">{fmtTime(first.departure.at)}</p>
-                                  <p className="text-sm font-semibold text-slate-600 mt-0.5">{first.departure.iataCode}</p>
+                                  <p className="text-xs font-semibold text-slate-600 mt-0.5 leading-tight">{airportLabel(first.departure.iataCode)}</p>
                                 </div>
                                 <div className="flex-1 flex flex-col items-center gap-1.5 px-2">
                                   <span className="text-xs font-medium text-slate-400 flex items-center gap-1">
@@ -1062,7 +1061,7 @@ export default function Home() {
                                       <sup className="text-[10px] font-bold text-[#ff8c42] absolute -top-1 -left-4">+{offset}</sup>
                                     )}
                                   </p>
-                                  <p className="text-sm font-semibold text-slate-600 mt-0.5">{last.arrival.iataCode}</p>
+                                  <p className="text-xs font-semibold text-slate-600 mt-0.5 leading-tight">{airportLabel(last.arrival.iataCode)}</p>
                                 </div>
                               </div>
 
@@ -1124,8 +1123,8 @@ export default function Home() {
                                 className="w-full bg-[#25D366] hover:bg-[#20BA5A] text-white flex items-center justify-center gap-2 rounded-xl h-11 font-bold shadow-md shadow-green-500/20"
                                 onClick={() =>
                                   bookViaWhatsApp({
-                                    origin: first.departure.iataCode,
-                                    destination: last.arrival.iataCode,
+                                    origin: airportLabel(first.departure.iataCode),
+                                    destination: airportLabel(last.arrival.iataCode),
                                     date: new Date(first.departure.at).toLocaleDateString(language === "ar" ? "ar-SA" : "en-US"),
                                     price: priceSdg,
                                   })
@@ -1243,7 +1242,7 @@ export default function Home() {
                 <div>
                   <h3 className="text-lg font-bold">تفاصيل الرحلة</h3>
                   <p className="text-sm text-white/70">
-                    {first.departure.iataCode} → {last.arrival.iataCode} · {formatDuration(flight.itineraries[0].duration)}
+                    {airportLabel(first.departure.iataCode)} ← {airportLabel(last.arrival.iataCode)} · {formatDuration(flight.itineraries[0].duration)}
                   </p>
                 </div>
                 <button onClick={() => setSelectedFlight(null)} className="w-9 h-9 rounded-full bg-white/10 hover:bg-white/20 flex items-center justify-center transition">
@@ -1286,7 +1285,7 @@ export default function Home() {
                         <div className="flex-1 pb-4 relative">
                           <span className="absolute -right-[9px] top-1 w-3.5 h-3.5 rounded-full bg-[#1e3a5f]" />
                           <p className="text-sm font-bold text-slate-800 pr-4">
-                            {fmtTime(seg.departure.at)} · {seg.departure.iataCode}
+                            {fmtTime(seg.departure.at)} · {airportLabel(seg.departure.iataCode)}
                           </p>
                           <p className="text-xs text-slate-400 pr-4">{fmtDate(seg.departure.at)}</p>
                         </div>
@@ -1295,14 +1294,14 @@ export default function Home() {
                         <div className="flex-1 pb-2 relative">
                           <span className="absolute -right-[9px] top-1 w-3.5 h-3.5 rounded-full bg-[#ff8c42]" />
                           <p className="text-sm font-bold text-slate-800 pr-4">
-                            {fmtTime(seg.arrival.at)} · {seg.arrival.iataCode}
+                            {fmtTime(seg.arrival.at)} · {airportLabel(seg.arrival.iataCode)}
                           </p>
                           <p className="text-xs text-slate-400 pr-4">{fmtDate(seg.arrival.at)}</p>
                         </div>
                       </div>
                       {nextSeg && (
                         <div className="my-3 text-center text-xs font-medium text-amber-600 bg-amber-50 rounded-lg py-2">
-                          توقّف في {seg.arrival.iataCode} · {layoverStr}
+                          توقّف في {airportNameAr(seg.arrival.iataCode)} · {layoverStr}
                         </div>
                       )}
                     </div>
