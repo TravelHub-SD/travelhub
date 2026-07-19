@@ -41,10 +41,13 @@ export async function GET(request: NextRequest) {
   if (!url) return NextResponse.json({ days: mockDays(start, end), mock: true })
 
   try {
+    // مهلة 55 ثانية — أول نداء لمسار جديد قد يفتح نموذج الحجز لاكتشاف مسار المحرّك
+    const controller = new AbortController()
+    const t = setTimeout(() => controller.abort(), 55_000)
     const res = await fetch(
       `${url.replace(/\/$/, "")}/availability?origin=${origin}&destination=${destination}&start=${start}&end=${end}`,
-      { headers: { "x-connector-key": process.env.CONNECTOR_API_KEY ?? "" }, cache: "no-store" },
-    )
+      { headers: { "x-connector-key": process.env.CONNECTOR_API_KEY ?? "" }, cache: "no-store", signal: controller.signal },
+    ).finally(() => clearTimeout(t))
     if (!res.ok) return NextResponse.json({ days: {}, warnings: [`connector HTTP ${res.status}`] })
     const data = await res.json()
     return NextResponse.json({ days: data.days || {}, warnings: data.warnings })

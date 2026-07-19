@@ -63,7 +63,9 @@ export function DatePicker({ value, onChange, label, placeholder = "اختر ا�
       .then((r) => r.json())
       .then((d) => {
         const days = d?.days || {}
-        availCache.set(cacheKey, days)
+        // لا نخبّئ النتيجة الفارغة — قد تكون فشلاً مؤقتاً (جلسة باردة/مهلة)
+        // فنعيد المحاولة عند فتح التقويم مرة أخرى بدل بقائه بلا أخضر
+        if (Object.keys(days).length > 0) availCache.set(cacheKey, days)
         if (alive) setAvail(days)
       })
       .catch(() => alive && setAvail(null))

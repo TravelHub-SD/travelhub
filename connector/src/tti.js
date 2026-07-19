@@ -111,12 +111,18 @@ export async function getCarrierAvailability(carrier, { origin, destination, sta
       return await r.json()
     }, `${base}GetAvailabilitySummary?${qs}`)
 
-    if (data?.__status) return { carrier: carrier.name, days: [], error: `HTTP ${data.__status}` }
+    if (data?.__status) {
+      // 401/302 ⇒ جلسة منتهية غالباً — أبطلها ليُعاد الدخول في المحاولة التالية
+      if (data.__status === 401 || data.__status === 302) await invalidateSession(carrier.code)
+      return { carrier: carrier.name, days: [], error: `HTTP ${data.__status}` }
+    }
     const days = (data?.Response?.Days || [])
       .filter((d) => d?.AvailStatus === 1)
       .map((d) => ({ date: String(d.Date).slice(0, 10), seats: Number(d.Availability) || 0 }))
     return { carrier: carrier.name, days, error: null }
   } catch (e) {
+    // فشل JSON (صفحة دخول بدل بيانات) أو تعطّل الإطار — أبطل الجلسة احتياطاً
+    await invalidateSession(carrier.code).catch(() => {})
     return { carrier: carrier.name, days: [], error: e?.message || String(e) }
   } finally {
     if (page) await page.close().catch(() => {})
