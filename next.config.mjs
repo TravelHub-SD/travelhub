@@ -4,11 +4,12 @@
 // 'unsafe-inline' للسكربت/الستايل مطلوبة لعمل Next hydration و Tailwind.
 const csp = [
   "default-src 'self'",
-  "script-src 'self' 'unsafe-inline'",
+  // googletagmanager: سكربت Google Analytics 4 (يعمل فقط عند ضبط NEXT_PUBLIC_GA_ID)
+  "script-src 'self' 'unsafe-inline' https://www.googletagmanager.com",
   "style-src 'self' 'unsafe-inline'",
-  "img-src 'self' data: blob: https://images.kiwi.com",
+  "img-src 'self' data: blob: https://images.kiwi.com https://www.google-analytics.com",
   "font-src 'self' data:",
-  "connect-src 'self'",
+  "connect-src 'self' https://www.google-analytics.com https://*.google-analytics.com https://*.analytics.google.com",
   "object-src 'none'",
   "base-uri 'self'",
   "form-action 'self'",

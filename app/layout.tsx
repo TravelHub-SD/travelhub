@@ -1,8 +1,12 @@
 import type React from "react"
 import type { Metadata } from "next"
 import { Cairo } from "next/font/google"
+import Script from "next/script"
 import { Analytics } from "@vercel/analytics/next"
 import "./globals.css"
+
+// Google Analytics 4 — يعمل تلقائياً عند ضبط NEXT_PUBLIC_GA_ID في Vercel
+const GA_ID = process.env.NEXT_PUBLIC_GA_ID
 
 const cairo = Cairo({ subsets: ["arabic", "latin"] })
 
@@ -99,6 +103,17 @@ export default function RootLayout({
         <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }} />
         {children}
         <Analytics />
+        {GA_ID && (
+          <>
+            <Script src={`https://www.googletagmanager.com/gtag/js?id=${GA_ID}`} strategy="afterInteractive" />
+            <Script id="ga4" strategy="afterInteractive">
+              {`window.dataLayer = window.dataLayer || [];
+                function gtag(){dataLayer.push(arguments);}
+                gtag('js', new Date());
+                gtag('config', '${GA_ID}');`}
+            </Script>
+          </>
+        )}
       </body>
     </html>
   )
