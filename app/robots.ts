@@ -6,7 +6,7 @@ export default function robots(): MetadataRoute.Robots {
       {
         userAgent: "*",
         allow: "/",
-        disallow: ["/api/"], // الـ API ليست للفهرسة
+        disallow: ["/api/", "/admin/"], // الـ API وصفحات الإدارة ليست للفهرسة
       },
     ],
     sitemap: "https://travelhub-sd.com/sitemap.xml",

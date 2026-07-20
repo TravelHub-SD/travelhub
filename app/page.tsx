@@ -51,6 +51,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { AirportSelect } from "@/components/airport-select"
 import { DatePicker } from "@/components/date-picker"
 import { PassengerSelect } from "@/components/passenger-select"
+import { RaffleBanner } from "@/components/raffle-banner"
 import { getAirlineName, getAirlineLogo } from "@/lib/airlines"
 import { airportLabel, airportNameAr } from "@/lib/airports"
 
@@ -1530,6 +1531,11 @@ export default function Home() {
             <img src="/london-hotel.jpg" alt="london" className="rounded-2xl h-40 w-full object-cover shadow-card mt-6" />
           </div>
         </div>
+      </section>
+
+      {/* ─── سحب الجوائز ─── */}
+      <section id="raffle" className="container mx-auto px-4 pt-14">
+        <RaffleBanner groupLink={WHATSAPP_GROUP_LINK} />
       </section>
 
       {/* ─── قروب الواتساب للعروض ─── */}
