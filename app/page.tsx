@@ -51,7 +51,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { AirportSelect } from "@/components/airport-select"
 import { DatePicker } from "@/components/date-picker"
 import { PassengerSelect } from "@/components/passenger-select"
-import { RaffleBanner } from "@/components/raffle-banner"
+import { LuckyWheel } from "@/components/lucky-wheel"
 import { getAirlineName, getAirlineLogo } from "@/lib/airlines"
 import { airportLabel, airportNameAr } from "@/lib/airports"
 
@@ -60,6 +60,9 @@ const PHONE_NUMBER = "249114610204"
 const WHATSAPP_NUMBER = "249960278594"
 // رابط قروب الواتساب الخاص بالعروض
 const WHATSAPP_GROUP_LINK = "https://chat.whatsapp.com/GGxhWOBUsXgJr98kbB1DmD"
+// روابط السوشال ميديا (شروط المشاركة في العجلة) — استبدلها بروابطك
+const TIKTOK_URL = "https://www.tiktok.com/@travelhub.sd"
+const INSTAGRAM_URL = "https://www.instagram.com/travelhub.sd"
 
 // أكواد فئات الركاب في نظام الحجز → التسمية العربية وخانة العدد في نموذج البحث
 const PAX_TYPE_INFO: Record<string, { label: string; key: "adults" | "children" | "infants" }> = {
@@ -1533,9 +1536,9 @@ export default function Home() {
         </div>
       </section>
 
-      {/* ─── سحب الجوائز ─── */}
+      {/* ─── عجلة الحظ ─── */}
       <section id="raffle" className="container mx-auto px-4 pt-14">
-        <RaffleBanner groupLink={WHATSAPP_GROUP_LINK} />
+        <LuckyWheel groupLink={WHATSAPP_GROUP_LINK} tiktokUrl={TIKTOK_URL} instagramUrl={INSTAGRAM_URL} />
       </section>
 
       {/* ─── قروب الواتساب للعروض ─── */}
