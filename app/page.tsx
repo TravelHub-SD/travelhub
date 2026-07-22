@@ -63,6 +63,8 @@ const WHATSAPP_GROUP_LINK = "https://chat.whatsapp.com/GGxhWOBUsXgJr98kbB1DmD"
 // روابط السوشال ميديا (شروط المشاركة في العجلة) — استبدلها بروابطك
 const TIKTOK_URL = "https://www.tiktok.com/@travelhub.sd"
 const INSTAGRAM_URL = "https://www.instagram.com/travelhub.sd"
+// عجلة الحظ مؤجّلة — اجعلها true عند الجاهزية (بعد ضبط Upstash + السوشال)
+const RAFFLE_ENABLED = false
 
 // أكواد فئات الركاب في نظام الحجز → التسمية العربية وخانة العدد في نموذج البحث
 const PAX_TYPE_INFO: Record<string, { label: string; key: "adults" | "children" | "infants" }> = {
@@ -136,21 +138,22 @@ function SmartImg({ src, alt, className }: { src: string; alt: string; className
 // شعار TravelHub الأصلي، مع بديل نصّي احتياطي
 function Logo() {
   const [err, setErr] = useState(false)
-  if (err) {
-    return (
-      <span className="text-2xl font-extrabold tracking-tight">
-        <span className="text-[#1f3a5f]">Travel</span>
+  // لوغو أفقي: الأيقونة (المقتطعة) + اسم واضح — بديل نصّي إن فشلت الصورة
+  return (
+    <span className="flex items-center gap-2">
+      {!err && (
+        <img
+          src="/travelhub-icon.png"
+          alt="Travel Hub"
+          className="h-10 w-auto object-contain shrink-0"
+          onError={() => setErr(true)}
+        />
+      )}
+      <span className="text-2xl font-extrabold tracking-tight leading-none">
+        <span className="text-[#1e3a5f]">Travel</span>
         <span className="text-[#ff8c42]">Hub</span>
       </span>
-    )
-  }
-  return (
-    <img
-      src="/travelhub-logo.png"
-      alt="TravelHub"
-      className="h-12 w-auto object-contain"
-      onError={() => setErr(true)}
-    />
+    </span>
   )
 }
 
@@ -1536,10 +1539,12 @@ export default function Home() {
         </div>
       </section>
 
-      {/* ─── عجلة الحظ ─── */}
-      <section id="raffle" className="container mx-auto px-4 pt-14">
-        <LuckyWheel groupLink={WHATSAPP_GROUP_LINK} tiktokUrl={TIKTOK_URL} instagramUrl={INSTAGRAM_URL} />
-      </section>
+      {/* ─── عجلة الحظ (مخفيّة مؤقتاً — فعّلها بجعل RAFFLE_ENABLED=true) ─── */}
+      {RAFFLE_ENABLED && (
+        <section id="raffle" className="container mx-auto px-4 pt-14">
+          <LuckyWheel groupLink={WHATSAPP_GROUP_LINK} tiktokUrl={TIKTOK_URL} instagramUrl={INSTAGRAM_URL} />
+        </section>
+      )}
 
       {/* ─── قروب الواتساب للعروض ─── */}
       <section className="container mx-auto px-4 py-14">
