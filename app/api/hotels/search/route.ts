@@ -65,18 +65,18 @@ export async function POST(request: NextRequest) {
     })
 
     if (!response.ok) {
-      console.error("[v0] API Error:", response.status, response.statusText)
+      console.error("[travelhub] API Error:", response.status, response.statusText)
       const errorData = await response.json()
-      console.error("[v0] Error details:", errorData)
+      console.error("[travelhub] Error details:", errorData)
       throw new Error("فشل البحث عن الفنادق")
     }
 
     const data = await response.json()
-    console.log("[v0] Hotels found:", data.data?.length || 0)
+    console.log("[travelhub] Hotels found:", data.data?.length || 0)
 
     return NextResponse.json(data)
   } catch (error) {
-    console.error("[v0] Error searching hotels:", error)
+    console.error("[travelhub] Error searching hotels:", error)
     return NextResponse.json({ error: "حدث خطأ أثناء البحث عن الفنادق" }, { status: 500 })
   }
 }
