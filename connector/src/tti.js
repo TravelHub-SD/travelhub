@@ -71,9 +71,11 @@ async function selectBookingAirport(frame, menuIndex, iata) {
   if (!ok) throw new Error(`المطار ${iata} غير متاح في القائمة`)
 }
 
-// مسار محرّك الحجز لكل خط (يُكتشف من رابط الإطار أول مرة) —
-// يُستخدم لنداء GetAvailabilitySummary مباشرة بدون فتح النموذج.
+// مسار محرّك الحجز + معامل externalParam لكل خط —
+// يُكتشفان من نداء النظام الفعلي (GetAvailabilitySummary) الذي يُطلقه المحرّك
+// تلقائياً عند فتحه، فنستعملهما لاحقاً في نداء الإتاحة لأي مسار مباشرةً.
 const engineBase = new Map() // carrier.code → "https://…/BookingEngine/"
+const engineExt = new Map() // carrier.code → externalParam (مثل "TA")
 
 function rememberEngineBase(carrier, frame) {
   try {
@@ -85,26 +87,51 @@ function rememberEngineBase(carrier, frame) {
   } catch {}
 }
 
+// يلتقط base + externalParam من أي رابط GetAvailabilitySummary يمرّ على الصفحة.
+function captureFromAvailUrl(carrier, url) {
+  try {
+    const i = url.indexOf("/BookingEngine/")
+    if (i <= 0) return
+    engineBase.set(carrier.code, url.slice(0, i + "/BookingEngine/".length))
+    const m = url.match(/[?&]externalParam=([^&]*)/)
+    if (m && m[1]) engineExt.set(carrier.code, decodeURIComponent(m[1]))
+  } catch {}
+}
+
+// يربط مستمعاً يلتقط معاملات المحرّك من نداء الإتاحة التلقائي؛ يُرجّع دالة فكّ الربط.
+function attachAvailCapture(page, carrier) {
+  const onResp = (r) => {
+    const u = r.url()
+    if (u.includes("GetAvailabilitySummary")) captureFromAvailUrl(carrier, u)
+  }
+  page.on("response", onResp)
+  return () => page.off("response", onResp)
+}
+
 // أيام الإتاحة لخط واحد عبر نداء الـ API الداخلي للمحرّك (سريع — بلا DOM).
 export async function getCarrierAvailability(carrier, { origin, destination, start, end }) {
   let page
+  let detach = () => {}
   try {
     const res = await getLoggedInPage(carrier, login)
     page = res.page
+    detach = attachAvailCapture(page, carrier) // التقاط base + externalParam من نداء النظام
 
     let base = engineBase.get(carrier.code)
     if (!base) {
-      const frame = await getBookingFrame(page) // مرة واحدة فقط لاكتشاف المسار
-      rememberEngineBase(carrier, frame)
+      await getBookingFrame(page) // يفتح المحرّك فيُطلق نداء الإتاحة التلقائي
+      await page.waitForTimeout(2000) // مهلة لالتقاط المعاملات
       base = engineBase.get(carrier.code)
     }
     if (!base) return { carrier: carrier.name, days: [], error: "لم يُعرف مسار المحرّك" }
 
+    // externalParam من التقاط النظام (تاركو=TA…)، أو من الإعداد، أو فارغ
+    const ext = engineExt.get(carrier.code) ?? carrier.ext ?? ""
     const qs =
       `departureAirportCode=${encodeURIComponent(origin)}` +
       `&arrivalAirportCode=${encodeURIComponent(destination)}` +
       `&startDate=${start}T00%3A00%3A00.000&endDate=${end}T23%3A59%3A59.999` +
-      `&externalParam=${encodeURIComponent(carrier.ext || "")}&ffpOnly=false&ssrs=`
+      `&externalParam=${encodeURIComponent(ext)}&ffpOnly=false&ssrs=`
     const data = await page.evaluate(async (u) => {
       const r = await fetch(u, { credentials: "include" })
       if (!r.ok) return { __status: r.status }
@@ -125,6 +152,7 @@ export async function getCarrierAvailability(carrier, { origin, destination, sta
     await invalidateSession(carrier.code).catch(() => {})
     return { carrier: carrier.name, days: [], error: e?.message || String(e) }
   } finally {
+    detach()
     if (page) await page.close().catch(() => {})
   }
 }
@@ -342,14 +370,17 @@ async function readResults(page, carrier, params) {
 // يُرجّع خريطة { CODE: label }.
 export async function listCarrierAirports(carrier) {
   let page
+  let detach = () => {}
   try {
     const res = await getLoggedInPage(carrier, login)
     page = res.page
+    detach = attachAvailCapture(page, carrier) // التقاط base + externalParam أثناء التسخين
     const frame = await getBookingFrame(page)
     rememberEngineBase(carrier, frame)
     await frame
       .waitForFunction(() => document.querySelector(".dropdown-menu a strong") != null, { timeout: 15000 })
       .catch(() => {})
+    await page.waitForTimeout(1500) // مهلة لالتقاط نداء الإتاحة التلقائي
     return await frame.evaluate(() => {
       const out = {}
       const menus = document.querySelectorAll(".dropdown-menu")
@@ -368,6 +399,7 @@ export async function listCarrierAirports(carrier) {
   } catch {
     return {}
   } finally {
+    detach()
     if (page) await page.close().catch(() => {})
   }
 }
