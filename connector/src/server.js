@@ -109,7 +109,7 @@ app.get("/availability", async (req, res) => {
   }
 
   const cacheKey = `avail:${origin}-${destination}-${start}-${end}`
-  const cached = cacheGet(cacheKey)
+  const cached = await cacheGet(cacheKey)
   if (cached) return res.json({ ...cached, cached: true })
 
   // وضع تجريبي: نمط أيام ثابت (إثنين/خميس) للعرض
@@ -122,7 +122,7 @@ app.get("/availability", async (req, res) => {
       d.setUTCDate(d.getUTCDate() + 1)
     }
     const payload = { days, carriers: [], warnings: ["mock"] }
-    cacheSet(cacheKey, payload, AVAIL_TTL_MS)
+    await cacheSet(cacheKey, payload, AVAIL_TTL_MS)
     return res.json(payload)
   }
 
@@ -135,8 +135,63 @@ app.get("/availability", async (req, res) => {
   }
   const warnings = results.filter((r) => r.error).map((r) => `${r.carrier}: ${r.error}`)
   const payload = { days, carriers: results.map((r) => r.carrier), warnings }
-  if (Object.keys(days).length > 0) cacheSet(cacheKey, payload, AVAIL_TTL_MS)
+  if (Object.keys(days).length > 0) await cacheSet(cacheKey, payload, AVAIL_TTL_MS)
   res.json(payload)
+})
+
+// ─── التسخين المسبق للمسارات الشائعة ─────────────────────────────────────────
+// يُشغَّل دورياً (Vercel Cron) ليملأ كاش الإتاحة للمسارات الأكثر بحثاً، فيقرأها
+// آلاف المستخدمين فوراً من Redis بلا تصفّح حي.
+const POPULAR_ROUTES = (
+  process.env.POPULAR_ROUTES || "KRT-PZU,KRT-JED,KRT-CAI,KRT-DXB,KRT-DOH,KRT-IST,KRT-DOG,PZU-JED"
+)
+  .split(",")
+  .map((s) => s.trim().toUpperCase())
+  .filter((s) => /^[A-Z]{3}-[A-Z]{3}$/.test(s))
+
+let warming = false
+async function warmPopular() {
+  if (warming || config.mock || config.carriers.length === 0) return
+  warming = true
+  let warmed = 0
+  try {
+    const now = new Date()
+    const months = [now, new Date(now.getFullYear(), now.getMonth() + 1, 1)]
+    for (const route of POPULAR_ROUTES) {
+      const [o, d] = route.split("-")
+      for (const [origin, destination] of [
+        [o, d],
+        [d, o],
+      ]) {
+        for (const m of months) {
+          const y = m.getFullYear()
+          const mo = m.getMonth()
+          const start = `${y}-${String(mo + 1).padStart(2, "0")}-01`
+          const last = new Date(y, mo + 1, 0)
+          const end = `${y}-${String(mo + 1).padStart(2, "0")}-${String(last.getDate()).padStart(2, "0")}`
+          const key = `avail:${origin}-${destination}-${start}-${end}`
+          if (await cacheGet(key)) continue // مُسخّن بالفعل
+          const results = await Promise.all(
+            config.carriers.map((c) => getCarrierAvailability(c, { origin, destination, start, end })),
+          )
+          const days = {}
+          for (const r of results) for (const dd of r.days) days[dd.date] = Math.max(days[dd.date] || 0, dd.seats)
+          if (Object.keys(days).length) {
+            await cacheSet(key, { days, carriers: results.map((r) => r.carrier), warnings: [] }, AVAIL_TTL_MS)
+            warmed++
+          }
+        }
+      }
+    }
+  } finally {
+    warming = false
+  }
+  return warmed
+}
+
+app.post("/warm", (_req, res) => {
+  res.json({ started: true, routes: POPULAR_ROUTES.length }) // رد فوري
+  warmPopular().catch(() => {}) // يعمل بالخلفية عبر محدِّد التزامن
 })
 
 // أداة فحص تشخيصية — معطّلة افتراضياً؛ فعّلها مؤقتاً بمتغيّر البيئة INSPECT_ENABLED=1
@@ -190,7 +245,7 @@ async function doSearch({ origin, destination, departureDate, returnDate, adults
   const retParams = returnDate ? { origin: destination, destination: origin, departureDate: returnDate, ...base } : null
   const cacheKey = `${origin}-${destination}-${departureDate}-${returnDate || "OW"}-${adults}-${children}-${infants}`
 
-  const cached = cacheGet(cacheKey)
+  const cached = await cacheGet(cacheKey)
   if (cached) return { status: 200, body: { ...cached, meta: { ...cached.meta, cached: true } } }
 
   // وضع تجريبي
@@ -203,7 +258,7 @@ async function doSearch({ origin, destination, departureDate, returnDate, adults
       ]
     }
     const payload = { data, meta: { source: "mock", carriers: ["تاركو", "بدر", "سودانير"], warnings: [] } }
-    cacheSet(cacheKey, payload, config.cacheTtlMs)
+    await cacheSet(cacheKey, payload, config.cacheTtlMs)
     return { status: 200, body: payload }
   }
 
@@ -236,7 +291,7 @@ async function doSearch({ origin, destination, departureDate, returnDate, adults
     data.sort((a, b) => Number(a.price.total) - Number(b.price.total))
 
     const payload = { data, meta: { source: "tti", carriers: config.carriers.map((c) => c.name), warnings } }
-    if (data.length) cacheSet(cacheKey, payload, config.cacheTtlMs) // لا نخبّئ فشلاً
+    if (data.length) await cacheSet(cacheKey, payload, config.cacheTtlMs) // لا نخبّئ فشلاً
     return payload
   })()
 
@@ -277,6 +332,8 @@ const server = app.listen(config.port, "0.0.0.0", () => {
   console.log(`[tti-connector] يعمل على المنفذ ${config.port} — الخطوط: ${config.carriers.map((c) => c.name).join(", ") || "(mock)"}`)
   // تسخين قائمة المطارات في الخلفية لتكون جاهزة عند أول طلب من الموقع.
   refreshAirports()
+  // ثم تسخين إتاحة المسارات الشائعة (بعد مهلة ليكتمل تسخين المطارات أولاً).
+  setTimeout(() => warmPopular().catch(() => {}), 60_000)
 })
 
 for (const sig of ["SIGINT", "SIGTERM"]) {
