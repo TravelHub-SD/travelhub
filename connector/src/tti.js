@@ -8,6 +8,10 @@
 import { config, SELECTORS } from "./config.js"
 import { getLoggedInPage, invalidateSession } from "./browser.js"
 import { flightsFromServerModel } from "./normalize.js"
+import { createLimiter } from "./limiter.js"
+
+// محدِّد تزامن مشترك لكل عمليات المتصفح (بحث/إتاحة/مطارات) — يحمي من الحمل العالي.
+const browserLimit = createLimiter(config.browserConcurrency, config.queueMaxWaitMs)
 
 // "2026-08-01" → { d, m, y }
 function parseDate(iso) {
@@ -109,7 +113,15 @@ function attachAvailCapture(page, carrier) {
 }
 
 // أيام الإتاحة لخط واحد عبر نداء الـ API الداخلي للمحرّك (سريع — بلا DOM).
-export async function getCarrierAvailability(carrier, { origin, destination, start, end }) {
+export async function getCarrierAvailability(carrier, args) {
+  try {
+    return await browserLimit(() => _getCarrierAvailability(carrier, args))
+  } catch (err) {
+    return { carrier: carrier.name, days: [], error: err?.message || String(err) }
+  }
+}
+
+async function _getCarrierAvailability(carrier, { origin, destination, start, end }) {
   let page
   let detach = () => {}
   try {
@@ -369,6 +381,14 @@ async function readResults(page, carrier, params) {
 // يقرأ مطارات النظام لخط معيّن من قوائم محرّك الحجز (المغادرة + الوجهة).
 // يُرجّع خريطة { CODE: label }.
 export async function listCarrierAirports(carrier) {
+  try {
+    return await browserLimit(() => _listCarrierAirports(carrier))
+  } catch {
+    return {}
+  }
+}
+
+async function _listCarrierAirports(carrier) {
   let page
   let detach = () => {}
   try {
@@ -505,7 +525,17 @@ export async function inspectBooking(carrier) {
 }
 
 // البحث عبر خط واحد → مصفوفة رحلات مطبّعة. يبتلع الأخطاء ويرجّع [] مع تسجيلها.
+// مغلّف بمحدِّد التزامن لحماية الموصّل من فتح متصفحات كثيرة معاً.
 export async function searchCarrier(carrier, params) {
+  try {
+    return await browserLimit(() => _searchCarrier(carrier, params))
+  } catch (err) {
+    // رُفض من الطابور (النظام مزدحم) — لا نُبطل الجلسة
+    return { carrier: carrier.name, flights: [], error: err?.message || String(err) }
+  }
+}
+
+async function _searchCarrier(carrier, params) {
   let page
   try {
     const res = await getLoggedInPage(carrier, login)

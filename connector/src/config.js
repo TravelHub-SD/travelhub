@@ -34,7 +34,11 @@ export const config = {
   browserWsEndpoint: process.env.BROWSER_WS_ENDPOINT || "",
   headless: (process.env.HEADLESS ?? "true") !== "false",
   sessionTtlMs: num(process.env.SESSION_TTL_MINUTES, 15) * 60_000,
-  cacheTtlMs: num(process.env.CACHE_TTL_SECONDS, 120) * 1000,
+  cacheTtlMs: num(process.env.CACHE_TTL_SECONDS, 180) * 1000,
+  // أقصى عمليات متصفح متزامنة (كل بحث = عملية لكل خط). يحمي الذاكرة تحت الحمل.
+  browserConcurrency: num(process.env.BROWSER_CONCURRENCY, 3),
+  // أقصى انتظار في الطابور قبل رفض الطلب بأدب (ms)
+  queueMaxWaitMs: num(process.env.QUEUE_MAX_WAIT_SECONDS, 45) * 1000,
   // أسعار البوابة بالجنيه السوداني؛ الافتراضي 3650 ليطابق سعر الموقع عند العرض.
   sdgPerUsd: num(process.env.SDG_PER_USD, 3650),
   mock: process.env.MOCK === "1",
