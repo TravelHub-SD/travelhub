@@ -2,7 +2,7 @@
 // معاً تحت الحمل العالي (السبب الرئيسي لتجمّد الموصّل). الطلبات الزائدة تنتظر
 // في طابور؛ ومن ينتظر أطول من maxWaitMs يُرفض بسرعة (BUSY) بدل تعليق كل النظام.
 
-export function createLimiter(max, maxWaitMs) {
+export function createLimiter(max, maxWaitMs, opTimeoutMs = 100_000) {
   let active = 0
   const queue = []
 
@@ -12,8 +12,17 @@ export function createLimiter(max, maxWaitMs) {
     if (!item) return
     clearTimeout(item.timer)
     active++
-    Promise.resolve()
-      .then(item.fn)
+    // مهلة صارمة لكل عملية: لو تعلّقت (متصفح/دخول) نحرّر الحصة بدل احتكارها للأبد
+    Promise.race([
+      Promise.resolve().then(item.fn),
+      new Promise((_, rej) =>
+        setTimeout(() => {
+          const e = new Error("انتهت مهلة العملية")
+          e.code = "OP_TIMEOUT"
+          rej(e)
+        }, opTimeoutMs),
+      ),
+    ])
       .then(item.resolve, item.reject)
       .finally(() => {
         active--

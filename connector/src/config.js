@@ -39,6 +39,10 @@ export const config = {
   browserConcurrency: num(process.env.BROWSER_CONCURRENCY, 3),
   // أقصى انتظار في الطابور قبل رفض الطلب بأدب (ms)
   queueMaxWaitMs: num(process.env.QUEUE_MAX_WAIT_SECONDS, 45) * 1000,
+  // مهلة صارمة لكل عملية متصفح قبل تحرير الحصة (ms)
+  opTimeoutMs: num(process.env.OP_TIMEOUT_SECONDS, 100) * 1000,
+  // التسخين المسبق للمسارات الشائعة — معطّل افتراضياً (كان يخنق طلبات المستخدمين)
+  warmEnabled: process.env.WARM_ENABLED === "1",
   // أسعار البوابة بالجنيه السوداني؛ الافتراضي 3650 ليطابق سعر الموقع عند العرض.
   sdgPerUsd: num(process.env.SDG_PER_USD, 3650),
   mock: process.env.MOCK === "1",

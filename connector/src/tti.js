@@ -11,7 +11,7 @@ import { flightsFromServerModel } from "./normalize.js"
 import { createLimiter } from "./limiter.js"
 
 // محدِّد تزامن مشترك لكل عمليات المتصفح (بحث/إتاحة/مطارات) — يحمي من الحمل العالي.
-const browserLimit = createLimiter(config.browserConcurrency, config.queueMaxWaitMs)
+const browserLimit = createLimiter(config.browserConcurrency, config.queueMaxWaitMs, config.opTimeoutMs)
 
 // "2026-08-01" → { d, m, y }
 function parseDate(iso) {

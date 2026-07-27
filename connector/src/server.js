@@ -151,6 +151,9 @@ const POPULAR_ROUTES = (
 
 let warming = false
 async function warmPopular() {
+  // معطّل افتراضياً — كان يحتكر حصص المتصفح ويخنق طلبات المستخدمين.
+  // فعّله فقط بعد التأكد من سعة كافية: WARM_ENABLED=1
+  if (!config.warmEnabled) return
   if (warming || config.mock || config.carriers.length === 0) return
   warming = true
   let warmed = 0
@@ -190,6 +193,7 @@ async function warmPopular() {
 }
 
 app.post("/warm", (_req, res) => {
+  if (!config.warmEnabled) return res.json({ started: false, disabled: true })
   res.json({ started: true, routes: POPULAR_ROUTES.length }) // رد فوري
   warmPopular().catch(() => {}) // يعمل بالخلفية عبر محدِّد التزامن
 })
