@@ -129,32 +129,59 @@ async function _getCarrierAvailability(carrier, { origin, destination, start, en
     page = res.page
     detach = attachAvailCapture(page, carrier) // التقاط base + externalParam من نداء النظام
 
-    let base = engineBase.get(carrier.code)
-    if (!base) {
-      await getBookingFrame(page) // يفتح المحرّك فيُطلق نداء الإتاحة التلقائي
-      await page.waitForTimeout(2000) // مهلة لالتقاط المعاملات
-      base = engineBase.get(carrier.code)
+    // نداء الإتاحة داخل سياق الصفحة — يرجّع الحالة والنص الخام (لنكتشف HTML)
+    const buildUrl = () => {
+      const base = engineBase.get(carrier.code)
+      if (!base) return null
+      const ext = engineExt.get(carrier.code) ?? carrier.ext ?? ""
+      const qs =
+        `departureAirportCode=${encodeURIComponent(origin)}` +
+        `&arrivalAirportCode=${encodeURIComponent(destination)}` +
+        `&startDate=${start}T00%3A00%3A00.000&endDate=${end}T23%3A59%3A59.999` +
+        `&externalParam=${encodeURIComponent(ext)}&ffpOnly=false&ssrs=`
+      return `${base}GetAvailabilitySummary?${qs}`
     }
-    if (!base) return { carrier: carrier.name, days: [], error: "لم يُعرف مسار المحرّك" }
-
-    // externalParam من التقاط النظام (تاركو=TA…)، أو من الإعداد، أو فارغ
-    const ext = engineExt.get(carrier.code) ?? carrier.ext ?? ""
-    const qs =
-      `departureAirportCode=${encodeURIComponent(origin)}` +
-      `&arrivalAirportCode=${encodeURIComponent(destination)}` +
-      `&startDate=${start}T00%3A00%3A00.000&endDate=${end}T23%3A59%3A59.999` +
-      `&externalParam=${encodeURIComponent(ext)}&ffpOnly=false&ssrs=`
-    const data = await page.evaluate(async (u) => {
-      const r = await fetch(u, { credentials: "include" })
-      if (!r.ok) return { __status: r.status }
-      return await r.json()
-    }, `${base}GetAvailabilitySummary?${qs}`)
-
-    if (data?.__status) {
-      // 401/302 ⇒ جلسة منتهية غالباً — أبطلها ليُعاد الدخول في المحاولة التالية
-      if (data.__status === 401 || data.__status === 302) await invalidateSession(carrier.code)
-      return { carrier: carrier.name, days: [], error: `HTTP ${data.__status}` }
+    const rawFetch = (u) =>
+      page.evaluate(async (url) => {
+        try {
+          const r = await fetch(url, { credentials: "include" })
+          return { status: r.status, body: await r.text() }
+        } catch (e) {
+          return { status: 0, body: String(e) }
+        }
+      }, u)
+    const parse = (resp) => {
+      if (!resp || resp.status === 0) return null
+      const t = (resp.body || "").trim()
+      if (!t || t[0] === "<") return null // HTML (صفحة دخول/خطأ) — ليست JSON
+      try {
+        return JSON.parse(t)
+      } catch {
+        return null
+      }
     }
+
+    // فتح محرّك الحجز مرة إن لم يكن المسار معروفاً (يُنشئ جلسة المحرّك)
+    if (!engineBase.get(carrier.code)) {
+      await getBookingFrame(page)
+      await page.waitForTimeout(2000)
+    }
+    let url = buildUrl()
+    if (!url) return { carrier: carrier.name, days: [], error: "لم يُعرف مسار المحرّك" }
+
+    let data = parse(await rawFetch(url))
+    // لو رجع HTML (جلسة محرّك غير نشطة) → افتح المحرّك وأعد المحاولة مرة واحدة
+    if (!data) {
+      await getBookingFrame(page)
+      await page.waitForTimeout(1500)
+      url = buildUrl() || url // قد يُحدَّث base/ext بعد الفتح
+      data = parse(await rawFetch(url))
+    }
+    if (!data) {
+      await invalidateSession(carrier.code) // الجلسة غالباً منتهية — أعِد الدخول لاحقاً
+      return { carrier: carrier.name, days: [], error: "رد غير JSON (جلسة المحرّك غير نشطة)" }
+    }
+
     const days = (data?.Response?.Days || [])
       .filter((d) => d?.AvailStatus === 1)
       .map((d) => ({ date: String(d.Date).slice(0, 10), seats: Number(d.Availability) || 0 }))
