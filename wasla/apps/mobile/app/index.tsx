@@ -1,7 +1,8 @@
 import { Redirect } from 'expo-router';
-import { ActivityIndicator, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, StyleSheet, View } from 'react-native';
 import { useAuth } from '@/context/AuthContext';
-import { font, colors } from '@/theme';
+import { WaslaLogo } from '@/components/WaslaLogo';
+import { colors } from '@/theme';
 
 /** بوابة الإقلاع: ننتظر استعادة الجلسة ثم نوجّه للتطبيق أو لتسجيل الدخول */
 export default function Index() {
@@ -10,8 +11,12 @@ export default function Index() {
   if (isLoading) {
     return (
       <View style={styles.splash}>
-        <Text style={styles.logo}>وصلة</Text>
-        <Text style={styles.tagline}>طلبك يوصلك بسرعة</Text>
+        <WaslaLogo
+          size={140}
+          color="#FFFFFF"
+          inkColor="#FFFFFF"
+          taglineColor="rgba(255,255,255,0.92)"
+        />
         <ActivityIndicator color="#fff" style={styles.spinner} />
       </View>
     );
@@ -26,9 +31,6 @@ const styles = StyleSheet.create({
     backgroundColor: colors.primary,
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 6,
   },
-  logo: { fontSize: 46, lineHeight: 69, fontFamily: font.black, color: '#fff', letterSpacing: 1 },
-  tagline: { fontFamily: font.regular, fontSize: 15, lineHeight: 22, color: 'rgba(255,255,255,0.9)' },
-  spinner: { marginTop: 28 },
+  spinner: { marginTop: 36 },
 });

@@ -13,6 +13,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { ApiError } from '@/api';
 import { useAuth } from '@/context/AuthContext';
 import { Button, Field } from '@/components/ui';
+import { WaslaLogo } from '@/components/WaslaLogo';
 import { font, colors, radius, rtl, spacing } from '@/theme';
 
 export default function LoginScreen() {
@@ -57,7 +58,9 @@ export default function LoginScreen() {
       >
         <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
           <View style={styles.header}>
-            <Text style={styles.logo}>وصلة</Text>
+            <View style={styles.logo}>
+              <WaslaLogo size={100} />
+            </View>
             <Text style={[styles.title, rtl.text]}>أهلاً بعودتك</Text>
             <Text style={[styles.subtitle, rtl.text]}>سجّل دخولك لمواصلة الطلب</Text>
           </View>
@@ -110,7 +113,7 @@ const styles = StyleSheet.create({
   content: { flexGrow: 1, padding: spacing.xl, justifyContent: 'center', gap: spacing.xxl },
 
   header: { gap: spacing.xs },
-  logo: { fontSize: 40, lineHeight: 60, fontFamily: font.black, color: colors.primary, textAlign: 'center', marginBottom: spacing.lg },
+  logo: { alignItems: 'center', marginBottom: spacing.lg },
   title: { fontSize: 24, lineHeight: 36, fontFamily: font.extrabold, color: colors.text },
   subtitle: { fontFamily: font.regular, fontSize: 15, lineHeight: 22, color: colors.textMuted },
 

@@ -57,7 +57,7 @@ export default function ProfileScreen() {
         <View style={styles.group}>
           <MenuRow icon="help-circle-outline" label="المساعدة والدعم" hint="نجيب على أسئلتك" onPress={showSoon} />
           <MenuRow icon="document-text-outline" label="الشروط والأحكام" onPress={showSoon} />
-          <MenuRow icon="information-circle-outline" label="عن وصلة" hint="الإصدار 1.0.0" onPress={showSoon} />
+          <MenuRow icon="information-circle-outline" label="عن وصله" hint="الإصدار 1.0.0" onPress={showSoon} />
         </View>
 
         <Pressable onPress={confirmLogout} style={[rtl.row, styles.logout]}>

@@ -266,7 +266,7 @@ const STORES = [
 ];
 
 async function main() {
-  console.log('🌱 تهيئة بيانات وصلة...');
+  console.log('🌱 تهيئة بيانات وصله...');
 
   // ترتيب الحذف يحترم المفاتيح الأجنبية
   await prisma.orderEvent.deleteMany();

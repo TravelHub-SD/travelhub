@@ -1,8 +1,22 @@
-/** نظام التصميم لتطبيق وصلة */
+/** نظام التصميم لتطبيق وصله */
+
+/**
+ * هوية العلامة.
+ * البرتقالي مأخوذ تقريبياً من ملف الهوية البصرية — إن كان لديك القيمة الرسمية
+ * (HEX من ملف الشعار الأصلي) غيّرها هنا فقط وتتحدّث الواجهة كلها.
+ */
+export const brand = {
+  name: 'وصله',
+  tagline: 'طلباتك.. بسرعة توصل',
+  orange: '#F4661B',
+  orangeDark: '#D9540F',
+  ink: '#1C1C1C', // لون كلمة "وصله" في الشعار
+};
+
 export const colors = {
-  primary: '#FF6B2C',
-  primaryDark: '#E85A1C',
-  primarySoft: '#FFF1EA',
+  primary: brand.orange,
+  primaryDark: brand.orangeDark,
+  primarySoft: '#FEF0E8',
   text: '#14181F',
   textMuted: '#6B7480',
   textFaint: '#9AA2AD',

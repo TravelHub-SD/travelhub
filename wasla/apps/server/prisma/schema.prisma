@@ -1,4 +1,4 @@
-// مخطط قاعدة بيانات تطبيق وصلة
+// مخطط قاعدة بيانات تطبيق وصله
 // SQLite للتطوير — للإنتاج غيّر provider إلى "postgresql" وحدّث DATABASE_URL
 
 generator client {

@@ -1,0 +1,28 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 215 150" width="215" height="150">
+  <!--
+    علامة وصله — إعادة بناء متجهة تقريبية من ملف الهوية البصرية:
+    خطوط سرعة + انسيابة برتقالية على شكل صينية ترتفع يميناً + غطاء تقديم.
+
+    غطاء التقديم محاط بحدّ برتقالي عمداً، ليبقى ظاهراً على الخلفيات البيضاء
+    والبرتقالية معاً.
+
+    لاستبداله بالشعار الأصلي: استبدل هذا الملف بملف SVG الرسمي (بنفس الاسم)،
+    ثم شغّل:  node scripts/generate-icons.mjs
+    يجب أن يستعمل الملف #F4661B للبرتقالي و #FFFFFF للأبيض حتى تعمل إعادة التلوين.
+  -->
+  <g stroke="#F4661B" stroke-width="13" stroke-linecap="round" fill="none">
+    <path d="M12 50 H52"/>
+    <path d="M4 78 H46"/>
+    <path d="M18 106 H54"/>
+  </g>
+
+  <path d="M132 26 L178 26 L178 88 C178 120, 78 120, 78 86 L78 64"
+        stroke="#F4661B" stroke-width="26" stroke-linecap="round"
+        stroke-linejoin="round" fill="none"/>
+
+  <g fill="#FFFFFF" stroke="#F4661B" stroke-width="5" stroke-linejoin="round">
+    <circle cx="126" cy="60" r="6"/>
+    <path d="M99 96 C99 60, 153 60, 153 96 Z"/>
+    <rect x="93" y="94" width="66" height="12" rx="6"/>
+  </g>
+</svg>
