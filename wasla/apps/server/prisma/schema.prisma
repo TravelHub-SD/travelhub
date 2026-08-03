@@ -1,0 +1,192 @@
+// مخطط قاعدة بيانات تطبيق وصلة
+// SQLite للتطوير — للإنتاج غيّر provider إلى "postgresql" وحدّث DATABASE_URL
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+/// مستخدم التطبيق (العميل)
+model User {
+  id           String    @id @default(cuid())
+  phone        String    @unique
+  name         String
+  email        String?   @unique
+  passwordHash String
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  addresses Address[]
+  orders    Order[]
+  reviews   Review[]
+}
+
+/// عنوان توصيل محفوظ للمستخدم
+model Address {
+  id        String   @id @default(cuid())
+  userId    String
+  label     String // البيت، الشغل، ...
+  area      String // الحي / المنطقة
+  city      String   @default("الخرطوم")
+  details   String // وصف تفصيلي: رقم المنزل، علامة مميزة
+  lat       Float?
+  lng       Float?
+  isDefault Boolean  @default(false)
+  createdAt DateTime @default(now())
+
+  user   User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  orders Order[]
+
+  @@index([userId])
+}
+
+/// تصنيف رئيسي: مطاعم، بقالة، صيدلية، ...
+model Category {
+  id     String @id @default(cuid())
+  name   String @unique
+  slug   String @unique
+  icon   String // اسم أيقونة أو إيموجي
+  sort   Int    @default(0)
+
+  stores Store[]
+}
+
+/// متجر أو مطعم
+model Store {
+  id            String  @id @default(cuid())
+  name          String
+  slug          String  @unique
+  description   String
+  imageUrl      String
+  logoUrl       String
+  categoryId    String
+  area          String
+  rating        Float   @default(0)
+  ratingCount   Int     @default(0)
+  deliveryFee   Int     @default(0) // بالقرش/الوحدة الصغرى
+  minOrder      Int     @default(0)
+  etaMinutes    Int     @default(30) // متوسط وقت التوصيل
+  isOpen        Boolean @default(true)
+  isFeatured    Boolean @default(false)
+
+  category      Category    @relation(fields: [categoryId], references: [id])
+  menuSections  MenuSection[]
+  items         MenuItem[]
+  orders        Order[]
+  reviews       Review[]
+
+  @@index([categoryId])
+}
+
+/// قسم داخل قائمة المتجر: مقبلات، مشروبات، ...
+model MenuSection {
+  id      String @id @default(cuid())
+  storeId String
+  name    String
+  sort    Int    @default(0)
+
+  store Store      @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  items MenuItem[]
+
+  @@index([storeId])
+}
+
+/// صنف قابل للطلب
+model MenuItem {
+  id          String  @id @default(cuid())
+  storeId     String
+  sectionId   String?
+  name        String
+  description String  @default("")
+  price       Int // بالوحدة الصغرى (قرش)
+  imageUrl    String  @default("")
+  isAvailable Boolean @default(true)
+  isPopular   Boolean @default(false)
+  sort        Int     @default(0)
+
+  store      Store        @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  section    MenuSection? @relation(fields: [sectionId], references: [id], onDelete: SetNull)
+  orderItems OrderItem[]
+
+  @@index([storeId])
+  @@index([sectionId])
+}
+
+/// طلب
+model Order {
+  id            String   @id @default(cuid())
+  code          String   @unique // رقم الطلب المعروض للمستخدم
+  userId        String
+  storeId       String
+  addressId     String?
+  status        String   @default("PENDING") // PENDING CONFIRMED PREPARING ON_THE_WAY DELIVERED CANCELLED
+  paymentMethod String   @default("CASH") // CASH | CARD | WALLET
+  subtotal      Int
+  deliveryFee   Int
+  total         Int
+  note          String   @default("")
+  addressSnapshot String @default("") // نسخة نصية من العنوان وقت الطلب
+  etaMinutes    Int      @default(30)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  user    User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  store   Store           @relation(fields: [storeId], references: [id])
+  address Address?        @relation(fields: [addressId], references: [id], onDelete: SetNull)
+  items   OrderItem[]
+  events  OrderEvent[]
+  review  Review?
+
+  @@index([userId])
+  @@index([storeId])
+}
+
+/// سطر داخل الطلب — نحفظ الاسم والسعر وقت الطلب حتى لا يتأثر بتغيّر المنيو
+model OrderItem {
+  id         String @id @default(cuid())
+  orderId    String
+  menuItemId String
+  name       String
+  unitPrice  Int
+  quantity   Int
+  note       String @default("")
+
+  order    Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  menuItem MenuItem @relation(fields: [menuItemId], references: [id])
+
+  @@index([orderId])
+}
+
+/// سجل تغيّر حالة الطلب — يغذّي شاشة تتبع الطلب
+model OrderEvent {
+  id        String   @id @default(cuid())
+  orderId   String
+  status    String
+  message   String
+  createdAt DateTime @default(now())
+
+  order Order @relation(fields: [orderId], references: [id], onDelete: Cascade)
+
+  @@index([orderId])
+}
+
+/// تقييم المتجر بعد توصيل الطلب
+model Review {
+  id        String   @id @default(cuid())
+  orderId   String   @unique
+  userId    String
+  storeId   String
+  rating    Int
+  comment   String   @default("")
+  createdAt DateTime @default(now())
+
+  order Order @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  user  User  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  store Store @relation(fields: [storeId], references: [id], onDelete: Cascade)
+
+  @@index([storeId])
+}
