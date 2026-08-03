@@ -3,7 +3,7 @@ import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useCart } from '../context/CartContext';
 import { formatPrice } from '../format';
-import { colors, radius, rtl, shadow, spacing } from '../theme';
+import { font, colors, radius, rtl, shadow, spacing } from '../theme';
 
 /** شريط عائم يظهر فوق التبويبات كلما كانت السلة غير فارغة */
 export function CartBar({ bottomOffset = 0 }: { bottomOffset?: number }) {
@@ -63,9 +63,9 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  countText: { color: '#fff', fontWeight: '800', fontSize: 13 },
-  title: { color: '#fff', fontWeight: '800', fontSize: 15 },
-  store: { color: 'rgba(255,255,255,0.85)', fontSize: 12 },
+  countText: { color: '#fff', fontFamily: font.extrabold, fontSize: 13, lineHeight: 20 },
+  title: { color: '#fff', fontFamily: font.extrabold, fontSize: 15, lineHeight: 22 },
+  store: { fontFamily: font.regular, color: 'rgba(255,255,255,0.85)', fontSize: 12, lineHeight: 18 },
   right: { alignItems: 'center', gap: spacing.xs },
-  total: { color: '#fff', fontWeight: '800', fontSize: 15 },
+  total: { color: '#fff', fontFamily: font.extrabold, fontSize: 15, lineHeight: 22 },
 });

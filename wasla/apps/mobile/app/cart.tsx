@@ -5,7 +5,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useCart } from '@/context/CartContext';
 import { formatPrice } from '@/format';
 import { Button, EmptyState, Stepper } from '@/components/ui';
-import { colors, radius, rtl, shadow, spacing } from '@/theme';
+import { font, colors, radius, rtl, shadow, spacing } from '@/theme';
 
 export default function CartScreen() {
   const router = useRouter();
@@ -132,7 +132,7 @@ const styles = StyleSheet.create({
     borderBottomColor: colors.border,
   },
   headerButton: { width: 40, alignItems: 'center' },
-  headerTitle: { fontSize: 17, fontWeight: '800', color: colors.text },
+  headerTitle: { fontSize: 17, lineHeight: 26, fontFamily: font.extrabold, color: colors.text },
 
   content: { padding: spacing.lg, gap: spacing.lg },
 
@@ -143,7 +143,7 @@ const styles = StyleSheet.create({
     padding: spacing.md,
     borderRadius: radius.md,
   },
-  storeName: { fontSize: 14, fontWeight: '800', color: colors.primary },
+  storeName: { fontSize: 14, lineHeight: 21, fontFamily: font.extrabold, color: colors.primary },
 
   lines: {
     backgroundColor: colors.bg,
@@ -160,10 +160,10 @@ const styles = StyleSheet.create({
     borderBottomColor: colors.border,
   },
   lineBody: { flex: 1, gap: 2 },
-  lineName: { fontSize: 15, fontWeight: '700', color: colors.text },
-  linePrice: { fontSize: 12, color: colors.textFaint },
+  lineName: { fontSize: 15, lineHeight: 22, fontFamily: font.bold, color: colors.text },
+  linePrice: { fontFamily: font.regular, fontSize: 12, lineHeight: 18, color: colors.textFaint },
   lineActions: { alignItems: 'center', gap: spacing.sm },
-  lineTotal: { fontSize: 13, fontWeight: '800', color: colors.text },
+  lineTotal: { fontSize: 13, lineHeight: 20, fontFamily: font.extrabold, color: colors.text },
 
   summary: {
     backgroundColor: colors.bg,
@@ -174,10 +174,10 @@ const styles = StyleSheet.create({
     gap: spacing.sm,
   },
   summaryRow: { justifyContent: 'space-between' },
-  summaryLabel: { fontSize: 14, color: colors.textMuted },
-  summaryLabelStrong: { fontSize: 16, fontWeight: '800', color: colors.text },
-  summaryValue: { fontSize: 14, fontWeight: '600', color: colors.text },
-  summaryValueStrong: { fontSize: 17, fontWeight: '900', color: colors.primary },
+  summaryLabel: { fontFamily: font.regular, fontSize: 14, lineHeight: 21, color: colors.textMuted },
+  summaryLabelStrong: { fontSize: 16, lineHeight: 24, fontFamily: font.extrabold, color: colors.text },
+  summaryValue: { fontSize: 14, lineHeight: 21, fontFamily: font.semibold, color: colors.text },
+  summaryValueStrong: { fontSize: 17, lineHeight: 26, fontFamily: font.black, color: colors.primary },
   divider: { height: StyleSheet.hairlineWidth, backgroundColor: colors.border, marginVertical: spacing.xs },
 
   warning: {
@@ -187,7 +187,7 @@ const styles = StyleSheet.create({
     padding: spacing.md,
     borderRadius: radius.md,
   },
-  warningText: { flex: 1, fontSize: 13, color: '#8A6100', lineHeight: 20 },
+  warningText: { fontFamily: font.regular, flex: 1, fontSize: 13, color: '#8A6100', lineHeight: 20 },
 
   footer: {
     padding: spacing.lg,

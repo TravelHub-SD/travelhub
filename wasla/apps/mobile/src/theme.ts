@@ -52,6 +52,22 @@ export const shadow = {
 } as const;
 
 /**
+ * خط Cairo — مصمّم للعربية ويغطي الأوزان التي نحتاجها.
+ *
+ * على أندرويد لا يُطبَّق fontWeight على الخطوط المخصّصة، فكل وزن يحتاج اسم
+ * عائلة مستقلاً. لذلك نستعمل هذه الأسماء بدل fontWeight في كل الأنماط.
+ * الأسماء يجب أن تطابق مفاتيح useFonts في app/_layout.tsx حرفياً.
+ */
+export const font = {
+  regular: 'Cairo_400Regular',
+  medium: 'Cairo_500Medium',
+  semibold: 'Cairo_600SemiBold',
+  bold: 'Cairo_700Bold',
+  extrabold: 'Cairo_800ExtraBold',
+  black: 'Cairo_900Black',
+} as const;
+
+/**
  * الواجهة عربية بالكامل، فنبني الاتجاه في الأنماط صراحةً بدل الاعتماد على
  * I18nManager.forceRTL — الأخير يتطلب إعادة تشغيل التطبيق ليأخذ مفعوله.
  */

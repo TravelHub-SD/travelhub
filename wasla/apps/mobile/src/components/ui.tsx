@@ -10,7 +10,7 @@ import {
   type ViewStyle,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { colors, radius, rtl, spacing } from '../theme';
+import { font, colors, radius, rtl, spacing } from '../theme';
 
 export function Button({
   label,
@@ -209,11 +209,11 @@ const styles = StyleSheet.create({
   buttonPressed: { opacity: 0.85 },
   buttonDisabled: { opacity: 0.5 },
   buttonInner: { alignItems: 'center', gap: spacing.sm },
-  buttonLabel: { fontSize: 16, fontWeight: '700' },
+  buttonLabel: { fontSize: 16, lineHeight: 24, fontFamily: font.bold },
 
   field: { gap: spacing.xs },
-  fieldLabel: { fontSize: 13, fontWeight: '600', color: colors.textMuted },
-  input: {
+  fieldLabel: { fontSize: 13, lineHeight: 20, fontFamily: font.semibold, color: colors.textMuted },
+  input: { fontFamily: font.regular,
     height: 50,
     borderRadius: radius.md,
     borderWidth: 1,
@@ -224,7 +224,7 @@ const styles = StyleSheet.create({
     color: colors.text,
   },
   inputError: { borderColor: colors.danger },
-  fieldError: { fontSize: 12, color: colors.danger },
+  fieldError: { fontFamily: font.regular, fontSize: 12, lineHeight: 18, color: colors.danger },
 
   card: {
     backgroundColor: colors.bg,
@@ -240,11 +240,11 @@ const styles = StyleSheet.create({
     borderRadius: radius.pill,
     alignSelf: 'flex-start',
   },
-  badgeLabel: { fontSize: 12, fontWeight: '700' },
+  badgeLabel: { fontSize: 12, lineHeight: 18, fontFamily: font.bold },
 
   rating: { alignItems: 'center', gap: 3 },
-  ratingValue: { fontSize: 13, fontWeight: '700', color: colors.text },
-  ratingCount: { fontSize: 12, color: colors.textFaint },
+  ratingValue: { fontSize: 13, lineHeight: 20, fontFamily: font.bold, color: colors.text },
+  ratingCount: { fontFamily: font.regular, fontSize: 12, lineHeight: 18, color: colors.textFaint },
 
   empty: { alignItems: 'center', paddingVertical: 56, paddingHorizontal: spacing.xl, gap: spacing.sm },
   emptyIcon: {
@@ -256,12 +256,12 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     marginBottom: spacing.sm,
   },
-  emptyTitle: { fontSize: 17, fontWeight: '800', color: colors.text },
-  emptyMessage: { fontSize: 14, color: colors.textMuted, textAlign: 'center', lineHeight: 22 },
+  emptyTitle: { fontSize: 17, lineHeight: 26, fontFamily: font.extrabold, color: colors.text },
+  emptyMessage: { fontFamily: font.regular, fontSize: 14, color: colors.textMuted, textAlign: 'center', lineHeight: 22 },
   emptyAction: { marginTop: spacing.md, minWidth: 190 },
 
   loading: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: spacing.md, padding: spacing.xl },
-  loadingLabel: { fontSize: 14, color: colors.textMuted },
+  loadingLabel: { fontFamily: font.regular, fontSize: 14, lineHeight: 21, color: colors.textMuted },
 
   stepper: {
     alignItems: 'center',
@@ -279,5 +279,5 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   stepperButtonDisabled: { backgroundColor: 'transparent' },
-  stepperValue: { minWidth: 22, textAlign: 'center', fontSize: 15, fontWeight: '800', color: colors.text },
+  stepperValue: { minWidth: 22, textAlign: 'center', fontSize: 15, lineHeight: 22, fontFamily: font.extrabold, color: colors.text },
 });

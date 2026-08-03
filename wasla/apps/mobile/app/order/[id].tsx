@@ -9,7 +9,7 @@ import { useAsync } from '@/useAsync';
 import { formatDate, formatPrice, ORDER_STATUS_LABEL, PAYMENT_LABEL } from '@/format';
 import { OrderStatusTrail } from '@/components/OrderStatusTrail';
 import { Badge, Button, ErrorState, Loading } from '@/components/ui';
-import { colors, radius, rtl, shadow, spacing } from '@/theme';
+import { font, colors, radius, rtl, shadow, spacing } from '@/theme';
 
 const LIVE_STATUSES = new Set(['PENDING', 'CONFIRMED', 'PREPARING', 'ON_THE_WAY']);
 const POLL_MS = 6000;
@@ -275,8 +275,8 @@ const styles = StyleSheet.create({
   },
   headerButton: { width: 40 },
   headerCenter: { alignItems: 'center' },
-  headerTitle: { fontSize: 16, fontWeight: '800', color: colors.text },
-  headerSub: { fontSize: 11, color: colors.textFaint, marginTop: 1 },
+  headerTitle: { fontSize: 16, lineHeight: 24, fontFamily: font.extrabold, color: colors.text },
+  headerSub: { fontFamily: font.regular, fontSize: 11, lineHeight: 16, color: colors.textFaint, marginTop: 1 },
 
   content: { padding: spacing.lg, gap: spacing.lg, paddingBottom: spacing.xxl },
 
@@ -291,7 +291,7 @@ const styles = StyleSheet.create({
   },
   statusTop: { alignItems: 'center', gap: spacing.md },
   logo: { width: 52, height: 52, borderRadius: radius.md, backgroundColor: colors.bgSoft },
-  storeName: { fontSize: 17, fontWeight: '800', color: colors.text, marginBottom: spacing.xs },
+  storeName: { fontSize: 17, lineHeight: 26, fontFamily: font.extrabold, color: colors.text, marginBottom: spacing.xs },
   etaBox: {
     alignItems: 'center',
     backgroundColor: colors.primarySoft,
@@ -299,8 +299,8 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.md,
     paddingVertical: spacing.sm,
   },
-  etaValue: { fontSize: 19, fontWeight: '900', color: colors.primary },
-  etaLabel: { fontSize: 10, color: colors.primary },
+  etaValue: { fontSize: 19, lineHeight: 28, fontFamily: font.black, color: colors.primary },
+  etaLabel: { fontFamily: font.regular, fontSize: 10, lineHeight: 15, color: colors.primary },
 
   card: {
     backgroundColor: colors.bg,
@@ -310,23 +310,23 @@ const styles = StyleSheet.create({
     padding: spacing.lg,
     gap: spacing.md,
   },
-  cardTitle: { fontSize: 15, fontWeight: '800', color: colors.text },
+  cardTitle: { fontSize: 15, lineHeight: 22, fontFamily: font.extrabold, color: colors.text },
 
   addressRow: { alignItems: 'flex-start', gap: spacing.sm },
-  addressText: { flex: 1, fontSize: 14, color: colors.textMuted, lineHeight: 21 },
-  noteText: { flex: 1, fontSize: 13, color: colors.textFaint, lineHeight: 20 },
+  addressText: { fontFamily: font.regular, flex: 1, fontSize: 14, color: colors.textMuted, lineHeight: 21 },
+  noteText: { fontFamily: font.regular, flex: 1, fontSize: 13, color: colors.textFaint, lineHeight: 20 },
 
   itemRow: { justifyContent: 'space-between', gap: spacing.md },
-  itemName: { flex: 1, fontSize: 14, color: colors.text },
-  itemPrice: { fontSize: 14, fontWeight: '600', color: colors.text },
-  summaryLabel: { flex: 1, fontSize: 13, color: colors.textMuted },
-  summaryValue: { fontSize: 13, fontWeight: '600', color: colors.text },
-  totalLabel: { flex: 1, fontSize: 16, fontWeight: '800', color: colors.text },
-  totalValue: { fontSize: 18, fontWeight: '900', color: colors.primary },
+  itemName: { fontFamily: font.regular, flex: 1, fontSize: 14, lineHeight: 21, color: colors.text },
+  itemPrice: { fontSize: 14, lineHeight: 21, fontFamily: font.semibold, color: colors.text },
+  summaryLabel: { fontFamily: font.regular, flex: 1, fontSize: 13, lineHeight: 20, color: colors.textMuted },
+  summaryValue: { fontSize: 13, lineHeight: 20, fontFamily: font.semibold, color: colors.text },
+  totalLabel: { flex: 1, fontSize: 16, lineHeight: 24, fontFamily: font.extrabold, color: colors.text },
+  totalValue: { fontSize: 18, lineHeight: 27, fontFamily: font.black, color: colors.primary },
   divider: { height: StyleSheet.hairlineWidth, backgroundColor: colors.border },
 
   starsRow: { gap: spacing.sm, justifyContent: 'center' },
-  reviewInput: {
+  reviewInput: { fontFamily: font.regular,
     backgroundColor: colors.bgSoft,
     borderRadius: radius.md,
     padding: spacing.md,
@@ -335,8 +335,8 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: colors.text,
   },
-  reviewComment: { fontSize: 14, color: colors.textMuted, lineHeight: 21 },
+  reviewComment: { fontFamily: font.regular, fontSize: 14, color: colors.textMuted, lineHeight: 21 },
 
   devButton: { padding: spacing.md, alignItems: 'center' },
-  devText: { fontSize: 11, color: colors.textFaint, textAlign: 'center', lineHeight: 17 },
+  devText: { fontFamily: font.regular, fontSize: 11, color: colors.textFaint, textAlign: 'center', lineHeight: 17 },
 });

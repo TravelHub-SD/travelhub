@@ -17,7 +17,7 @@ import { useAsync } from '@/useAsync';
 import { useCart } from '@/context/CartContext';
 import { formatPrice, PAYMENT_LABEL } from '@/format';
 import { Button, Loading } from '@/components/ui';
-import { colors, radius, rtl, shadow, spacing } from '@/theme';
+import { font, colors, radius, rtl, shadow, spacing } from '@/theme';
 
 const PAYMENT_METHODS = [
   { value: 'CASH', icon: 'cash-outline' as const },
@@ -228,7 +228,7 @@ const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: colors.bgSoft },
   flex: { flex: 1 },
   centered: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: spacing.lg, padding: spacing.xl },
-  emptyText: { fontSize: 16, color: colors.textMuted },
+  emptyText: { fontFamily: font.regular, fontSize: 16, lineHeight: 24, color: colors.textMuted },
 
   header: {
     alignItems: 'center',
@@ -240,14 +240,14 @@ const styles = StyleSheet.create({
     borderBottomColor: colors.border,
   },
   headerButton: { width: 40 },
-  headerTitle: { fontSize: 17, fontWeight: '800', color: colors.text },
+  headerTitle: { fontSize: 17, lineHeight: 26, fontFamily: font.extrabold, color: colors.text },
 
   content: { padding: spacing.lg, gap: spacing.xl, paddingBottom: spacing.xl },
 
   section: { gap: spacing.md },
   sectionHeader: { alignItems: 'center', justifyContent: 'space-between' },
-  sectionTitle: { fontSize: 16, fontWeight: '800', color: colors.text },
-  link: { fontSize: 13, fontWeight: '700', color: colors.primary },
+  sectionTitle: { fontSize: 16, lineHeight: 24, fontFamily: font.extrabold, color: colors.text },
+  link: { fontSize: 13, lineHeight: 20, fontFamily: font.bold, color: colors.primary },
 
   optionList: {
     backgroundColor: colors.bg,
@@ -264,8 +264,8 @@ const styles = StyleSheet.create({
     borderBottomColor: colors.border,
   },
   optionActive: { backgroundColor: colors.primarySoft },
-  optionTitle: { fontSize: 15, fontWeight: '700', color: colors.text },
-  optionHint: { fontSize: 12, color: colors.textMuted, marginTop: 2, lineHeight: 18 },
+  optionTitle: { fontSize: 15, lineHeight: 22, fontFamily: font.bold, color: colors.text },
+  optionHint: { fontFamily: font.regular, fontSize: 12, color: colors.textMuted, marginTop: 2, lineHeight: 18 },
 
   addAddress: {
     flexDirection: 'row-reverse',
@@ -276,9 +276,9 @@ const styles = StyleSheet.create({
     borderRadius: radius.md,
     paddingVertical: spacing.lg,
   },
-  addAddressText: { fontSize: 15, fontWeight: '700', color: colors.primary },
+  addAddressText: { fontSize: 15, lineHeight: 22, fontFamily: font.bold, color: colors.primary },
 
-  noteInput: {
+  noteInput: { fontFamily: font.regular,
     backgroundColor: colors.bg,
     borderRadius: radius.md,
     borderWidth: 1,
@@ -299,14 +299,14 @@ const styles = StyleSheet.create({
     gap: spacing.sm,
   },
   summaryRow: { justifyContent: 'space-between', gap: spacing.md },
-  summaryLabel: { flex: 1, fontSize: 14, color: colors.textMuted },
-  summaryValue: { fontSize: 14, fontWeight: '600', color: colors.text },
+  summaryLabel: { fontFamily: font.regular, flex: 1, fontSize: 14, lineHeight: 21, color: colors.textMuted },
+  summaryValue: { fontSize: 14, lineHeight: 21, fontFamily: font.semibold, color: colors.text },
   divider: { height: StyleSheet.hairlineWidth, backgroundColor: colors.border, marginVertical: spacing.xs },
-  totalLabel: { fontSize: 16, fontWeight: '800', color: colors.text },
-  totalValue: { fontSize: 18, fontWeight: '900', color: colors.primary },
+  totalLabel: { fontSize: 16, lineHeight: 24, fontFamily: font.extrabold, color: colors.text },
+  totalValue: { fontSize: 18, lineHeight: 27, fontFamily: font.black, color: colors.primary },
 
-  error: {
-    fontSize: 13,
+  error: { fontFamily: font.regular,
+    fontSize: 13, lineHeight: 20,
     color: colors.danger,
     backgroundColor: colors.dangerSoft,
     padding: spacing.md,

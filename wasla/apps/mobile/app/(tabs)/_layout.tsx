@@ -5,7 +5,7 @@ import { View, Text, StyleSheet } from 'react-native';
 import { useAuth } from '@/context/AuthContext';
 import { useCart } from '@/context/CartContext';
 import { Loading } from '@/components/ui';
-import { colors } from '@/theme';
+import { font, colors } from '@/theme';
 
 export default function TabsLayout() {
   const { user, isLoading } = useAuth();
@@ -20,8 +20,9 @@ export default function TabsLayout() {
         headerShown: false,
         tabBarActiveTintColor: colors.primary,
         tabBarInactiveTintColor: colors.textFaint,
-        tabBarStyle: { borderTopColor: colors.border, height: 60, paddingBottom: 6, paddingTop: 6 },
-        tabBarLabelStyle: { fontSize: 11, fontWeight: '700' },
+        // ارتفاع أكبر من الافتراضي لأن Cairo أطول من خط النظام فتُقص التسميات
+        tabBarStyle: { borderTopColor: colors.border, height: 70, paddingBottom: 10, paddingTop: 8 },
+        tabBarLabelStyle: { fontSize: 11, lineHeight: 17, fontFamily: font.bold },
       }}
     >
       <Tabs.Screen
@@ -78,5 +79,5 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  badgeText: { color: '#fff', fontSize: 10, fontWeight: '800' },
+  badgeText: { color: '#fff', fontSize: 10, lineHeight: 15, fontFamily: font.extrabold },
 });

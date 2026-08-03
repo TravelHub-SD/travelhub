@@ -127,6 +127,18 @@ PENDING → CONFIRMED → PREPARING → ON_THE_WAY → DELIVERED
 - **الطلب من متجر واحد** في السلة، مع طلب تأكيد قبل استبدال سلة متجر آخر.
 - **الاتجاه RTL** مبني في الأنماط صراحةً بدل `I18nManager.forceRTL`، لأن الأخير
   يتطلب إعادة تشغيل التطبيق ليأخذ مفعوله.
+- **الخط Cairo** يُحمَّل محلياً من `@expo-google-fonts/cairo` (لا يحتاج إنترنت وقت التشغيل).
+  على أندرويد لا يعمل `fontWeight` مع الخطوط المخصّصة، لذلك **لا نستعمل `fontWeight`
+  إطلاقاً** — بل عائلة مستقلة لكل وزن عبر `font` في `src/theme.ts`:
+
+  ```ts
+  import { font } from '@/theme';
+  title: { fontSize: 17, lineHeight: 26, fontFamily: font.extrabold }
+  ```
+
+  وكل نمط نصّي يحتاج `lineHeight ≈ 1.5 × fontSize`، لأن Cairo أطول من خط النظام
+  ويحتاج مساحة للتشكيل — بدونه تُقصّ الحروف. (لا تضع `lineHeight` على `TextInput`،
+  فهو يسبب اختلال محاذاة على أندرويد.)
 - **العملة** افتراضياً الجنيه السوداني (`ج.س`) وتُضبط من `CURRENCY` في `.env`
   ومن `apps/mobile/src/format.ts`.
 

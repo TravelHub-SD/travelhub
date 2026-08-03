@@ -9,7 +9,7 @@ import { useCart } from '@/context/CartContext';
 import { formatPrice } from '@/format';
 import { CartBar } from '@/components/CartBar';
 import { Badge, ErrorState, Loading, Rating } from '@/components/ui';
-import { colors, radius, rtl, spacing } from '@/theme';
+import { font, colors, radius, rtl, spacing } from '@/theme';
 
 export default function StoreScreen() {
   const { slug } = useLocalSearchParams<{ slug: string }>();
@@ -197,8 +197,8 @@ const styles = StyleSheet.create({
   },
   headerTop: { gap: spacing.md, alignItems: 'center' },
   logo: { width: 58, height: 58, borderRadius: radius.md, backgroundColor: colors.bgSoft },
-  name: { fontSize: 21, fontWeight: '900', color: colors.text },
-  description: { fontSize: 13, color: colors.textMuted, marginTop: 2 },
+  name: { fontSize: 21, lineHeight: 32, fontFamily: font.black, color: colors.text },
+  description: { fontFamily: font.regular, fontSize: 13, lineHeight: 20, color: colors.textMuted, marginTop: 2 },
 
   statsRow: {
     justifyContent: 'space-around',
@@ -207,13 +207,13 @@ const styles = StyleSheet.create({
     paddingVertical: spacing.md,
   },
   stat: { alignItems: 'center', gap: 2 },
-  statLabel: { fontSize: 14, fontWeight: '800', color: colors.text },
-  statHint: { fontSize: 11, color: colors.textFaint },
+  statLabel: { fontSize: 14, lineHeight: 21, fontFamily: font.extrabold, color: colors.text },
+  statHint: { fontFamily: font.regular, fontSize: 11, lineHeight: 16, color: colors.textFaint },
 
   badgeRow: { gap: spacing.sm, flexWrap: 'wrap' },
 
   section: { marginTop: spacing.lg, gap: spacing.md },
-  sectionTitle: { fontSize: 17, fontWeight: '800', color: colors.text, paddingHorizontal: spacing.lg },
+  sectionTitle: { fontSize: 17, lineHeight: 26, fontFamily: font.extrabold, color: colors.text, paddingHorizontal: spacing.lg },
   itemList: { paddingHorizontal: spacing.lg, gap: spacing.sm },
 
   item: {
@@ -227,9 +227,9 @@ const styles = StyleSheet.create({
   itemInner: { alignItems: 'center', gap: spacing.md },
   itemBody: { flex: 1, gap: 3 },
   itemTitleRow: { alignItems: 'center', gap: spacing.sm },
-  itemName: { fontSize: 15, fontWeight: '700', color: colors.text },
-  itemDescription: { fontSize: 12, color: colors.textMuted, lineHeight: 18 },
-  itemPrice: { fontSize: 14, fontWeight: '800', color: colors.primary, marginTop: 2 },
+  itemName: { fontSize: 15, lineHeight: 22, fontFamily: font.bold, color: colors.text },
+  itemDescription: { fontFamily: font.regular, fontSize: 12, color: colors.textMuted, lineHeight: 18 },
+  itemPrice: { fontSize: 14, lineHeight: 21, fontFamily: font.extrabold, color: colors.primary, marginTop: 2 },
 
   addButton: {
     width: 34,
@@ -247,5 +247,5 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  inCartText: { color: '#fff', fontWeight: '800', fontSize: 14 },
+  inCartText: { color: '#fff', fontFamily: font.extrabold, fontSize: 14, lineHeight: 21 },
 });

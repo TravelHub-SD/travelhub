@@ -8,7 +8,7 @@ import { api } from '@/api';
 import { useAsync } from '@/useAsync';
 import { formatDate, formatPrice, ORDER_STATUS_LABEL } from '@/format';
 import { Badge, Button, EmptyState, ErrorState, Loading } from '@/components/ui';
-import { colors, radius, rtl, spacing } from '@/theme';
+import { font, colors, radius, rtl, spacing } from '@/theme';
 
 const ACTIVE_STATUSES = new Set(['PENDING', 'CONFIRMED', 'PREPARING', 'ON_THE_WAY']);
 
@@ -133,11 +133,11 @@ function OrderRow({
 const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: colors.bgSoft },
   header: { backgroundColor: colors.bg, padding: spacing.lg },
-  title: { fontSize: 22, fontWeight: '800', color: colors.text },
+  title: { fontSize: 22, lineHeight: 33, fontFamily: font.extrabold, color: colors.text },
   content: { padding: spacing.lg, paddingBottom: spacing.xxl, gap: spacing.xl },
 
   section: { gap: spacing.md },
-  sectionTitle: { fontSize: 15, fontWeight: '800', color: colors.textMuted },
+  sectionTitle: { fontSize: 15, lineHeight: 22, fontFamily: font.extrabold, color: colors.textMuted },
 
   row: {
     backgroundColor: colors.bg,
@@ -151,7 +151,7 @@ const styles = StyleSheet.create({
   logo: { width: 50, height: 50, borderRadius: radius.md, backgroundColor: colors.bgSoft },
   rowBody: { flex: 1, gap: 3 },
   rowTop: { alignItems: 'center', justifyContent: 'space-between', gap: spacing.sm },
-  storeName: { flex: 1, fontSize: 15, fontWeight: '800', color: colors.text },
-  meta: { fontSize: 12, color: colors.textMuted },
-  date: { fontSize: 11, color: colors.textFaint },
+  storeName: { flex: 1, fontSize: 15, lineHeight: 22, fontFamily: font.extrabold, color: colors.text },
+  meta: { fontFamily: font.regular, fontSize: 12, lineHeight: 18, color: colors.textMuted },
+  date: { fontFamily: font.regular, fontSize: 11, lineHeight: 16, color: colors.textFaint },
 });

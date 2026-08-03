@@ -5,7 +5,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { API_BASE_URL } from '@/api';
 import { useAuth } from '@/context/AuthContext';
 import { useCart } from '@/context/CartContext';
-import { colors, radius, rtl, spacing } from '@/theme';
+import { font, colors, radius, rtl, spacing } from '@/theme';
 
 export default function ProfileScreen() {
   const router = useRouter();
@@ -125,10 +125,10 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     marginBottom: spacing.sm,
   },
-  avatarText: { fontSize: 30, fontWeight: '900', color: colors.primary },
-  name: { fontSize: 19, fontWeight: '800', color: colors.text },
-  phone: { fontSize: 14, color: colors.textMuted },
-  email: { fontSize: 13, color: colors.textFaint },
+  avatarText: { fontSize: 30, lineHeight: 45, fontFamily: font.black, color: colors.primary },
+  name: { fontSize: 19, lineHeight: 28, fontFamily: font.extrabold, color: colors.text },
+  phone: { fontFamily: font.regular, fontSize: 14, lineHeight: 21, color: colors.textMuted },
+  email: { fontFamily: font.regular, fontSize: 13, lineHeight: 20, color: colors.textFaint },
 
   group: {
     backgroundColor: colors.bg,
@@ -148,8 +148,8 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  menuLabel: { fontSize: 15, fontWeight: '700', color: colors.text },
-  menuHint: { fontSize: 12, color: colors.textFaint, marginTop: 1 },
+  menuLabel: { fontSize: 15, lineHeight: 22, fontFamily: font.bold, color: colors.text },
+  menuHint: { fontFamily: font.regular, fontSize: 12, lineHeight: 18, color: colors.textFaint, marginTop: 1 },
 
   logout: {
     alignItems: 'center',
@@ -159,7 +159,7 @@ const styles = StyleSheet.create({
     borderRadius: radius.lg,
     paddingVertical: spacing.lg,
   },
-  logoutText: { fontSize: 15, fontWeight: '800', color: colors.danger },
+  logoutText: { fontSize: 15, lineHeight: 22, fontFamily: font.extrabold, color: colors.danger },
 
-  debug: { fontSize: 11, color: colors.textFaint, textAlign: 'center' },
+  debug: { fontFamily: font.regular, fontSize: 11, lineHeight: 16, color: colors.textFaint, textAlign: 'center' },
 });

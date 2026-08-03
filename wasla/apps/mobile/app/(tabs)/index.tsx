@@ -19,7 +19,7 @@ import { StoreCard } from '@/components/StoreCard';
 import { RtlRow } from '@/components/RtlRow';
 import { CartBar } from '@/components/CartBar';
 import { ErrorState, Loading } from '@/components/ui';
-import { colors, radius, rtl, shadow, spacing } from '@/theme';
+import { font, colors, radius, rtl, shadow, spacing } from '@/theme';
 
 export default function HomeScreen() {
   const router = useRouter();
@@ -182,9 +182,9 @@ const styles = StyleSheet.create({
 
   header: { backgroundColor: colors.bg, padding: spacing.lg, gap: spacing.md },
   headerTop: { alignItems: 'center' },
-  greeting: { fontSize: 20, fontWeight: '800', color: colors.text },
+  greeting: { fontSize: 20, lineHeight: 30, fontFamily: font.extrabold, color: colors.text },
   addressRow: { alignItems: 'center', gap: 4, marginTop: 2 },
-  addressText: { fontSize: 13, color: colors.textMuted, flexShrink: 1 },
+  addressText: { fontFamily: font.regular, fontSize: 13, lineHeight: 20, color: colors.textMuted, flexShrink: 1 },
 
   searchBar: {
     alignItems: 'center',
@@ -194,10 +194,10 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.md,
     height: 46,
   },
-  searchPlaceholder: { fontSize: 14, color: colors.textFaint },
+  searchPlaceholder: { fontFamily: font.regular, fontSize: 14, lineHeight: 21, color: colors.textFaint },
 
   section: { marginTop: spacing.xl, gap: spacing.md },
-  sectionTitle: { fontSize: 17, fontWeight: '800', color: colors.text, paddingHorizontal: spacing.lg },
+  sectionTitle: { fontSize: 17, lineHeight: 26, fontFamily: font.extrabold, color: colors.text, paddingHorizontal: spacing.lg },
 
   categoryRow: { paddingHorizontal: spacing.lg, gap: spacing.sm },
   categoryChip: {
@@ -212,8 +212,8 @@ const styles = StyleSheet.create({
     minWidth: 84,
   },
   categoryChipActive: { backgroundColor: colors.primarySoft, borderColor: colors.primary },
-  categoryIcon: { fontSize: 22 },
-  categoryLabel: { fontSize: 12, fontWeight: '700', color: colors.textMuted },
+  categoryIcon: { fontFamily: font.regular, fontSize: 22, lineHeight: 33 },
+  categoryLabel: { fontSize: 12, lineHeight: 18, fontFamily: font.bold, color: colors.textMuted },
   categoryLabelActive: { color: colors.primary },
 
   popularRow: { paddingHorizontal: spacing.lg, gap: spacing.md },
@@ -228,10 +228,10 @@ const styles = StyleSheet.create({
   },
   popularImage: { width: '100%', height: 88, backgroundColor: colors.bgSoft },
   popularBody: { padding: spacing.md, gap: 2 },
-  popularName: { fontSize: 14, fontWeight: '700', color: colors.text },
-  popularStore: { fontSize: 11, color: colors.textFaint },
-  popularPrice: { fontSize: 13, fontWeight: '800', color: colors.primary, marginTop: 2 },
+  popularName: { fontSize: 14, lineHeight: 21, fontFamily: font.bold, color: colors.text },
+  popularStore: { fontFamily: font.regular, fontSize: 11, lineHeight: 16, color: colors.textFaint },
+  popularPrice: { fontSize: 13, lineHeight: 20, fontFamily: font.extrabold, color: colors.primary, marginTop: 2 },
 
   storeList: { paddingHorizontal: spacing.lg, gap: spacing.md },
-  noStores: { fontSize: 14, color: colors.textMuted, paddingVertical: spacing.xl, textAlign: 'center' },
+  noStores: { fontFamily: font.regular, fontSize: 14, lineHeight: 21, color: colors.textMuted, paddingVertical: spacing.xl, textAlign: 'center' },
 });

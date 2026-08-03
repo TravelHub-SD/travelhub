@@ -15,7 +15,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { ApiError, api } from '@/api';
 import { useAsync } from '@/useAsync';
 import { Badge, Button, EmptyState, ErrorState, Field, Loading } from '@/components/ui';
-import { colors, radius, rtl, spacing } from '@/theme';
+import { font, colors, radius, rtl, spacing } from '@/theme';
 
 export default function AddressesScreen() {
   const router = useRouter();
@@ -192,7 +192,7 @@ const styles = StyleSheet.create({
     borderBottomColor: colors.border,
   },
   headerButton: { width: 40 },
-  headerTitle: { fontSize: 17, fontWeight: '800', color: colors.text },
+  headerTitle: { fontSize: 17, lineHeight: 26, fontFamily: font.extrabold, color: colors.text },
 
   content: { padding: spacing.lg, gap: spacing.lg, paddingBottom: spacing.xxl },
   list: { gap: spacing.md },
@@ -215,8 +215,8 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   labelRow: { alignItems: 'center', gap: spacing.sm, marginBottom: 2 },
-  addressLabel: { fontSize: 15, fontWeight: '800', color: colors.text },
-  addressDetails: { fontSize: 13, color: colors.textMuted, lineHeight: 20 },
+  addressLabel: { fontSize: 15, lineHeight: 22, fontFamily: font.extrabold, color: colors.text },
+  addressDetails: { fontFamily: font.regular, fontSize: 13, color: colors.textMuted, lineHeight: 20 },
 
   addressActions: {
     gap: spacing.lg,
@@ -225,7 +225,7 @@ const styles = StyleSheet.create({
     paddingTop: spacing.md,
   },
   action: { paddingVertical: 2 },
-  actionText: { fontSize: 13, fontWeight: '700', color: colors.primary },
+  actionText: { fontSize: 13, lineHeight: 20, fontFamily: font.bold, color: colors.primary },
   actionDanger: { color: colors.danger },
 
   form: {
@@ -236,10 +236,10 @@ const styles = StyleSheet.create({
     padding: spacing.lg,
     gap: spacing.md,
   },
-  formTitle: { fontSize: 16, fontWeight: '800', color: colors.text },
+  formTitle: { fontSize: 16, lineHeight: 24, fontFamily: font.extrabold, color: colors.text },
   formActions: { gap: spacing.sm, marginTop: spacing.xs },
-  error: {
-    fontSize: 13,
+  error: { fontFamily: font.regular,
+    fontSize: 13, lineHeight: 20,
     color: colors.danger,
     backgroundColor: colors.dangerSoft,
     padding: spacing.md,

@@ -4,7 +4,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { Link } from 'expo-router';
 import type { ApiStore } from '../api';
 import { formatPrice } from '../format';
-import { colors, radius, rtl, shadow, spacing } from '../theme';
+import { font, colors, radius, rtl, shadow, spacing } from '../theme';
 import { Rating } from './ui';
 
 export function StoreCard({ store }: { store: ApiStore }) {
@@ -75,7 +75,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  closedLabel: { color: '#fff', fontWeight: '800', fontSize: 14 },
+  closedLabel: { color: '#fff', fontFamily: font.extrabold, fontSize: 14, lineHeight: 21 },
   etaChip: {
     position: 'absolute',
     bottom: spacing.sm,
@@ -88,13 +88,13 @@ const styles = StyleSheet.create({
     paddingVertical: 4,
     borderRadius: radius.pill,
   },
-  etaText: { fontSize: 12, fontWeight: '700', color: colors.text },
+  etaText: { fontSize: 12, lineHeight: 18, fontFamily: font.bold, color: colors.text },
 
   body: { padding: spacing.md, gap: 5 },
   titleRow: { alignItems: 'center', justifyContent: 'space-between' },
-  name: { flex: 1, fontSize: 16, fontWeight: '800', color: colors.text },
-  description: { fontSize: 13, color: colors.textMuted },
+  name: { flex: 1, fontSize: 16, lineHeight: 24, fontFamily: font.extrabold, color: colors.text },
+  description: { fontFamily: font.regular, fontSize: 13, lineHeight: 20, color: colors.textMuted },
   metaRow: { alignItems: 'center', gap: spacing.lg, marginTop: 2 },
   meta: { alignItems: 'center', gap: 4 },
-  metaText: { fontSize: 12, color: colors.textFaint },
+  metaText: { fontFamily: font.regular, fontSize: 12, lineHeight: 18, color: colors.textFaint },
 });

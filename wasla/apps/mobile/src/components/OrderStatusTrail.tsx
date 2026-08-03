@@ -2,7 +2,7 @@ import { StyleSheet, Text, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import type { ApiOrderEvent } from '../api';
 import { formatTime } from '../format';
-import { colors, radius, rtl, spacing } from '../theme';
+import { font, colors, radius, rtl, spacing } from '../theme';
 
 const FLOW = ['PENDING', 'CONFIRMED', 'PREPARING', 'ON_THE_WAY', 'DELIVERED'] as const;
 
@@ -106,10 +106,10 @@ const styles = StyleSheet.create({
   connectorDone: { backgroundColor: colors.success },
 
   stepBody: { flex: 1, paddingBottom: spacing.lg, paddingTop: 5 },
-  stepLabel: { fontSize: 14, fontWeight: '600', color: colors.textFaint },
+  stepLabel: { fontSize: 14, lineHeight: 21, fontFamily: font.semibold, color: colors.textFaint },
   stepLabelDone: { color: colors.text },
-  stepLabelCurrent: { color: colors.primary, fontWeight: '800' },
-  stepTime: { fontSize: 12, color: colors.textFaint, marginTop: 2 },
+  stepLabelCurrent: { color: colors.primary, fontFamily: font.extrabold },
+  stepTime: { fontFamily: font.regular, fontSize: 12, lineHeight: 18, color: colors.textFaint, marginTop: 2 },
 
   cancelled: {
     alignItems: 'center',
@@ -119,6 +119,6 @@ const styles = StyleSheet.create({
     borderRadius: radius.md,
   },
   cancelledBody: { flex: 1 },
-  cancelledTitle: { fontSize: 15, fontWeight: '800', color: colors.danger },
-  cancelledTime: { fontSize: 12, color: colors.danger, opacity: 0.8, marginTop: 2 },
+  cancelledTitle: { fontSize: 15, lineHeight: 22, fontFamily: font.extrabold, color: colors.danger },
+  cancelledTime: { fontFamily: font.regular, fontSize: 12, lineHeight: 18, color: colors.danger, opacity: 0.8, marginTop: 2 },
 });

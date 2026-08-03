@@ -7,7 +7,7 @@ import { ApiError } from '@/api';
 import { StoreCard } from '@/components/StoreCard';
 import { CartBar } from '@/components/CartBar';
 import { EmptyState, Loading } from '@/components/ui';
-import { colors, radius, rtl, spacing } from '@/theme';
+import { font, colors, radius, rtl, spacing } from '@/theme';
 
 const SUGGESTIONS = ['شاورما', 'بيتزا', 'فول', 'حلويات', 'صيدلية', 'عصير'];
 
@@ -118,12 +118,12 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.md,
     height: 46,
   },
-  input: { flex: 1, fontSize: 14, color: colors.text },
+  input: { fontFamily: font.regular, flex: 1, fontSize: 14, color: colors.text },
 
   content: { padding: spacing.lg, paddingBottom: 110 },
 
   suggestions: { gap: spacing.md },
-  suggestTitle: { fontSize: 15, fontWeight: '800', color: colors.text },
+  suggestTitle: { fontSize: 15, lineHeight: 22, fontFamily: font.extrabold, color: colors.text },
   chipWrap: { flexDirection: 'row-reverse', flexWrap: 'wrap', gap: spacing.sm },
   chip: {
     backgroundColor: colors.bg,
@@ -133,8 +133,8 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.lg,
     paddingVertical: spacing.sm,
   },
-  chipText: { fontSize: 13, fontWeight: '600', color: colors.text },
+  chipText: { fontSize: 13, lineHeight: 20, fontFamily: font.semibold, color: colors.text },
 
   results: { gap: spacing.md },
-  resultCount: { fontSize: 13, color: colors.textMuted, marginBottom: spacing.xs },
+  resultCount: { fontFamily: font.regular, fontSize: 13, lineHeight: 20, color: colors.textMuted, marginBottom: spacing.xs },
 });

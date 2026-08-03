@@ -1,7 +1,7 @@
 import { Redirect } from 'expo-router';
 import { ActivityIndicator, StyleSheet, Text, View } from 'react-native';
 import { useAuth } from '@/context/AuthContext';
-import { colors } from '@/theme';
+import { font, colors } from '@/theme';
 
 /** بوابة الإقلاع: ننتظر استعادة الجلسة ثم نوجّه للتطبيق أو لتسجيل الدخول */
 export default function Index() {
@@ -28,7 +28,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     gap: 6,
   },
-  logo: { fontSize: 46, fontWeight: '900', color: '#fff', letterSpacing: 1 },
-  tagline: { fontSize: 15, color: 'rgba(255,255,255,0.9)' },
+  logo: { fontSize: 46, lineHeight: 69, fontFamily: font.black, color: '#fff', letterSpacing: 1 },
+  tagline: { fontFamily: font.regular, fontSize: 15, lineHeight: 22, color: 'rgba(255,255,255,0.9)' },
   spinner: { marginTop: 28 },
 });

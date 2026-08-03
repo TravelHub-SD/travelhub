@@ -13,7 +13,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { ApiError } from '@/api';
 import { useAuth } from '@/context/AuthContext';
 import { Button, Field } from '@/components/ui';
-import { colors, radius, rtl, spacing } from '@/theme';
+import { font, colors, radius, rtl, spacing } from '@/theme';
 
 export default function LoginScreen() {
   const router = useRouter();
@@ -110,13 +110,13 @@ const styles = StyleSheet.create({
   content: { flexGrow: 1, padding: spacing.xl, justifyContent: 'center', gap: spacing.xxl },
 
   header: { gap: spacing.xs },
-  logo: { fontSize: 40, fontWeight: '900', color: colors.primary, textAlign: 'center', marginBottom: spacing.lg },
-  title: { fontSize: 24, fontWeight: '800', color: colors.text },
-  subtitle: { fontSize: 15, color: colors.textMuted },
+  logo: { fontSize: 40, lineHeight: 60, fontFamily: font.black, color: colors.primary, textAlign: 'center', marginBottom: spacing.lg },
+  title: { fontSize: 24, lineHeight: 36, fontFamily: font.extrabold, color: colors.text },
+  subtitle: { fontFamily: font.regular, fontSize: 15, lineHeight: 22, color: colors.textMuted },
 
   form: { gap: spacing.lg },
-  error: {
-    fontSize: 13,
+  error: { fontFamily: font.regular,
+    fontSize: 13, lineHeight: 20,
     color: colors.danger,
     backgroundColor: colors.dangerSoft,
     padding: spacing.md,
@@ -128,9 +128,9 @@ const styles = StyleSheet.create({
     padding: spacing.md,
     borderRadius: radius.sm,
   },
-  demoText: { fontSize: 13, color: colors.primary, fontWeight: '600' },
+  demoText: { fontSize: 13, lineHeight: 20, color: colors.primary, fontFamily: font.semibold },
 
   footer: { justifyContent: 'center', alignItems: 'center', gap: spacing.xs },
-  footerText: { fontSize: 14, color: colors.textMuted },
-  footerLink: { fontSize: 14, fontWeight: '800', color: colors.primary },
+  footerText: { fontFamily: font.regular, fontSize: 14, lineHeight: 21, color: colors.textMuted },
+  footerLink: { fontSize: 14, lineHeight: 21, fontFamily: font.extrabold, color: colors.primary },
 });
