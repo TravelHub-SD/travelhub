@@ -161,19 +161,46 @@ async function _getCarrierAvailability(carrier, { origin, destination, start, en
       }
     }
 
-    // فتح محرّك الحجز مرة إن لم يكن المسار معروفاً (يُنشئ جلسة المحرّك)
-    if (!engineBase.get(carrier.code)) {
-      await getBookingFrame(page)
-      await page.waitForTimeout(2000)
+    // نحتاج base (مسار المحرّك) + ext (externalParam). ext ثابت لكل خط
+    // فبمجرّد التقاطه مرة يبقى للعملية كلها. إن لم يكونا معروفين نفتح المحرّك
+    // وننتظر نداء الإتاحة التلقائي فعلياً (التقاط حتمي بدل مهلة ثابتة).
+    if (!engineBase.get(carrier.code) || !engineExt.has(carrier.code)) {
+      const summaryP = page
+        .waitForResponse((r) => r.url().includes("GetAvailabilitySummary"), { timeout: 12000 })
+        .catch(() => null)
+      const frame = await getBookingFrame(page)
+      rememberEngineBase(carrier, frame)
+      await summaryP // المستمع (attachAvailCapture) يخزّن base+ext عند مرور النداء
+
+      // لو لم يُطلق المحرّك النداء تلقائياً، نختار المسار لإجباره على إطلاقه.
+      if (!engineExt.has(carrier.code)) {
+        try {
+          await frame
+            .waitForFunction(() => document.querySelector(".dropdown-menu a strong") != null, { timeout: 10000 })
+            .catch(() => {})
+          const forceP = page
+            .waitForResponse((r) => r.url().includes("GetAvailabilitySummary"), { timeout: 12000 })
+            .catch(() => null)
+          await selectBookingAirport(frame, 0, origin)
+          await frame.waitForTimeout(500)
+          await selectBookingAirport(frame, 1, destination).catch(() => {})
+          await forceP
+        } catch {
+          /* نكمل بما التقطناه */
+        }
+      }
     }
     let url = buildUrl()
-    if (!url) return { carrier: carrier.name, days: [], error: "لم يُعرف مسار المحرّك" }
+    if (!url) return { carrier: carrier.name, days: [], error: "لم يُعرف مسار المحرّك (base)" }
 
     let data = parse(await rawFetch(url))
     // لو رجع HTML (جلسة محرّك غير نشطة) → افتح المحرّك وأعد المحاولة مرة واحدة
     if (!data) {
-      await getBookingFrame(page)
-      await page.waitForTimeout(1500)
+      const summaryP = page
+        .waitForResponse((r) => r.url().includes("GetAvailabilitySummary"), { timeout: 8000 })
+        .catch(() => null)
+      await getBookingFrame(page).catch(() => {})
+      await summaryP
       url = buildUrl() || url // قد يُحدَّث base/ext بعد الفتح
       data = parse(await rawFetch(url))
     }
@@ -422,12 +449,17 @@ async function _listCarrierAirports(carrier) {
     const res = await getLoggedInPage(carrier, login)
     page = res.page
     detach = attachAvailCapture(page, carrier) // التقاط base + externalParam أثناء التسخين
+    const summaryP = page
+      .waitForResponse((r) => r.url().includes("GetAvailabilitySummary"), { timeout: 12000 })
+      .catch(() => null)
     const frame = await getBookingFrame(page)
     rememberEngineBase(carrier, frame)
     await frame
       .waitForFunction(() => document.querySelector(".dropdown-menu a strong") != null, { timeout: 15000 })
       .catch(() => {})
-    await page.waitForTimeout(1500) // مهلة لالتقاط نداء الإتاحة التلقائي
+    // انتظر نداء الإتاحة التلقائي فعلياً (يمنح externalParam) بدل مهلة عمياء —
+    // فتصبح الأيام الخضراء جاهزة للجلب السريع فور إقلاع النسخة.
+    await summaryP
     return await frame.evaluate(() => {
       const out = {}
       const menus = document.querySelectorAll(".dropdown-menu")
