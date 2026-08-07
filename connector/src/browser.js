@@ -54,14 +54,6 @@ export async function getLoggedInPage(carrier, loginFn) {
 
   const browser = await getBrowser()
   const context = await browser.newContext({ locale: "ar" })
-  // تسريع + توفير ذاكرة: نحجب الصور/الخطوط/الوسائط. نقرأ بيانات JSON من
-  // النموذج (ServerModel) ونداء الإتاحة — لا نحتاج أصولاً بصرية إطلاقاً.
-  // نُبقي CSS و JS (يحتاجهما Knockout وفحوص الظهور offsetParent).
-  await context.route("**/*", (route) => {
-    const t = route.request().resourceType()
-    if (t === "image" || t === "media" || t === "font") return route.abort()
-    return route.continue()
-  })
   const page = await context.newPage()
   await loginFn(page, carrier)
   sessions.set(key, { context, loggedInAt: Date.now() })
