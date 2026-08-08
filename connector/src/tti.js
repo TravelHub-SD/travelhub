@@ -80,6 +80,10 @@ async function selectBookingAirport(frame, menuIndex, iata) {
 // تلقائياً عند فتحه، فنستعملهما لاحقاً في نداء الإتاحة لأي مسار مباشرةً.
 const engineBase = new Map() // carrier.code → "https://…/BookingEngine/"
 const engineExt = new Map() // carrier.code → externalParam (مثل "TA")
+// الرابط الحقيقي الكامل لنداء GetAvailabilitySummary كما يطلقه النظام نفسه —
+// نستعمله قالباً ونبدّل فيه (المطارات + نطاق التاريخ) فقط، فنحافظ على كل
+// المعاملات التي يرسلها المحرّك ⇒ يعمل لكل الوجهات لا وجهات بعينها.
+const engineAvailUrl = new Map() // carrier.code → full GetAvailabilitySummary URL
 
 function rememberEngineBase(carrier, frame) {
   try {
@@ -91,7 +95,7 @@ function rememberEngineBase(carrier, frame) {
   } catch {}
 }
 
-// يلتقط base + externalParam من أي رابط GetAvailabilitySummary يمرّ على الصفحة.
+// يلتقط base + externalParam + الرابط الكامل من أي نداء GetAvailabilitySummary.
 function captureFromAvailUrl(carrier, url) {
   try {
     const i = url.indexOf("/BookingEngine/")
@@ -99,7 +103,27 @@ function captureFromAvailUrl(carrier, url) {
     engineBase.set(carrier.code, url.slice(0, i + "/BookingEngine/".length))
     const m = url.match(/[?&]externalParam=([^&]*)/)
     if (m && m[1]) engineExt.set(carrier.code, decodeURIComponent(m[1]))
+    engineAvailUrl.set(carrier.code, url) // القالب الحقيقي الكامل
   } catch {}
+}
+
+// يبني رابط الإتاحة من القالب الحقيقي: يبدّل المطارات ونطاق التاريخ فقط،
+// ويُبقي كل معاملات المحرّك الأخرى كما هي (market/culture/POS…).
+function buildFromTemplate(carrier, origin, destination, start, end) {
+  const tmpl = engineAvailUrl.get(carrier.code)
+  if (!tmpl) return null
+  try {
+    const u = new URL(tmpl)
+    const p = u.searchParams
+    if (p.has("departureAirportCode")) p.set("departureAirportCode", origin)
+    if (p.has("arrivalAirportCode")) p.set("arrivalAirportCode", destination)
+    p.set("startDate", `${start}T00:00:00.000`)
+    p.set("endDate", `${end}T23:59:59.999`)
+    u.search = p.toString()
+    return u.toString()
+  } catch {
+    return null
+  }
 }
 
 // يربط مستمعاً يلتقط معاملات المحرّك من نداء الإتاحة التلقائي؛ يُرجّع دالة فكّ الربط.
@@ -129,18 +153,7 @@ async function _getCarrierAvailability(carrier, { origin, destination, start, en
     page = res.page
     detach = attachAvailCapture(page, carrier) // التقاط base + externalParam من نداء النظام
 
-    // نداء الإتاحة داخل سياق الصفحة — يرجّع الحالة والنص الخام (لنكتشف HTML)
-    const buildUrl = () => {
-      const base = engineBase.get(carrier.code)
-      if (!base) return null
-      const ext = engineExt.get(carrier.code) ?? carrier.ext ?? ""
-      const qs =
-        `departureAirportCode=${encodeURIComponent(origin)}` +
-        `&arrivalAirportCode=${encodeURIComponent(destination)}` +
-        `&startDate=${start}T00%3A00%3A00.000&endDate=${end}T23%3A59%3A59.999` +
-        `&externalParam=${encodeURIComponent(ext)}&ffpOnly=false&ssrs=`
-      return `${base}GetAvailabilitySummary?${qs}`
-    }
+    // نداء داخل سياق الصفحة يرجّع الحالة والنص الخام (لنكتشف HTML مقابل JSON)
     const rawFetch = (u) =>
       page.evaluate(async (url) => {
         try {
@@ -160,48 +173,55 @@ async function _getCarrierAvailability(carrier, { origin, destination, start, en
         return null
       }
     }
+    const daysFrom = (data) =>
+      (data?.Response?.Days || [])
+        .filter((d) => d?.AvailStatus === 1)
+        .map((d) => ({ date: String(d.Date).slice(0, 10), seats: Number(d.Availability) || 0 }))
+    // رابط احتياطي مبني يدوياً (لو لم نلتقط القالب الحقيقي بعد)
+    const buildManual = () => {
+      const base = engineBase.get(carrier.code)
+      if (!base) return null
+      const ext = engineExt.get(carrier.code) ?? carrier.ext ?? ""
+      const qs =
+        `departureAirportCode=${encodeURIComponent(origin)}` +
+        `&arrivalAirportCode=${encodeURIComponent(destination)}` +
+        `&startDate=${start}T00%3A00%3A00.000&endDate=${end}T23%3A59%3A59.999` +
+        `&externalParam=${encodeURIComponent(ext)}&ffpOnly=false&ssrs=`
+      return `${base}GetAvailabilitySummary?${qs}`
+    }
 
-    // نحتاج base (مسار المحرّك) + ext (externalParam). ext ثابت لكل خط
-    // فبمجرّد التقاطه مرة يبقى للعملية كلها. إن لم يكونا معروفين نفتح المحرّك
-    // وننتظر نداء الإتاحة التلقائي فعلياً (التقاط حتمي بدل مهلة ثابتة).
-    if (!engineBase.get(carrier.code) || !engineExt.has(carrier.code)) {
-      const summaryP = page
-        .waitForResponse((r) => r.url().includes("GetAvailabilitySummary"), { timeout: 12000 })
-        .catch(() => null)
+    // ── الحل الجذري: ندخل المحرّك ونختار المسار فعلياً، فيُطلق النظامُ نداءَ
+    // الإتاحة الحقيقي لهذا المسار — نلتقطه قالباً كاملاً (بكل معاملاته) ثم نعيد
+    // الجلب بالمدى المطلوب. يعمل لكل الوجهات لأننا نستخدم نداء النظام نفسه.
+    const enterEngineAndSelectRoute = async () => {
       const frame = await getBookingFrame(page)
       rememberEngineBase(carrier, frame)
-      await summaryP // المستمع (attachAvailCapture) يخزّن base+ext عند مرور النداء
-
-      // لو لم يُطلق المحرّك النداء تلقائياً، نختار المسار لإجباره على إطلاقه.
-      if (!engineExt.has(carrier.code)) {
-        try {
-          await frame
-            .waitForFunction(() => document.querySelector(".dropdown-menu a strong") != null, { timeout: 10000 })
-            .catch(() => {})
-          const forceP = page
-            .waitForResponse((r) => r.url().includes("GetAvailabilitySummary"), { timeout: 12000 })
-            .catch(() => null)
-          await selectBookingAirport(frame, 0, origin)
-          await frame.waitForTimeout(500)
-          await selectBookingAirport(frame, 1, destination).catch(() => {})
-          await forceP
-        } catch {
-          /* نكمل بما التقطناه */
-        }
-      }
-    }
-    let url = buildUrl()
-    if (!url) return { carrier: carrier.name, days: [], error: "لم يُعرف مسار المحرّك (base)" }
-
-    let data = parse(await rawFetch(url))
-    // لو رجع HTML (جلسة محرّك غير نشطة) → افتح المحرّك وأعد المحاولة مرة واحدة
-    if (!data) {
-      const summaryP = page
-        .waitForResponse((r) => r.url().includes("GetAvailabilitySummary"), { timeout: 8000 })
+      await frame
+        .waitForFunction(() => document.querySelector(".dropdown-menu a strong") != null, { timeout: 12000 })
+        .catch(() => {})
+      const routeP = page
+        .waitForResponse((r) => r.url().includes("GetAvailabilitySummary"), { timeout: 12000 })
         .catch(() => null)
-      await getBookingFrame(page).catch(() => {})
-      await summaryP
-      url = buildUrl() || url // قد يُحدَّث base/ext بعد الفتح
+      await selectBookingAirport(frame, 0, origin)
+      await frame.waitForTimeout(500)
+      await selectBookingAirport(frame, 1, destination).catch(() => {})
+      await routeP // ينتظر نداء الإتاحة الحقيقي لهذا المسار (يُلتقط قالباً)
+      await frame.waitForTimeout(300)
+    }
+
+    // إن لم نلتقط القالب الحقيقي بعد، ادخل المحرّك واختر المسار لالتقاطه.
+    if (!engineAvailUrl.has(carrier.code)) await enterEngineAndSelectRoute().catch(() => {})
+
+    // اجلب المدى المطلوب من القالب الحقيقي (يبدّل المطارات + التاريخ فقط)
+    let url = buildFromTemplate(carrier, origin, destination, start, end) || buildManual()
+    if (!url) return { carrier: carrier.name, days: [], error: "لم يُلتقط نداء الإتاحة بعد" }
+    let data = parse(await rawFetch(url))
+
+    // لو رجع HTML/فارغ (جلسة غير نشطة أو قالب قديم) → ادخل المحرّك واختر المسار
+    // لالتقاط قالب حديث، ثم أعِد الجلب مرة واحدة.
+    if (!data) {
+      await enterEngineAndSelectRoute().catch(() => {})
+      url = buildFromTemplate(carrier, origin, destination, start, end) || buildManual() || url
       data = parse(await rawFetch(url))
     }
     if (!data) {
@@ -209,10 +229,7 @@ async function _getCarrierAvailability(carrier, { origin, destination, start, en
       return { carrier: carrier.name, days: [], error: "رد غير JSON (جلسة المحرّك غير نشطة)" }
     }
 
-    const days = (data?.Response?.Days || [])
-      .filter((d) => d?.AvailStatus === 1)
-      .map((d) => ({ date: String(d.Date).slice(0, 10), seats: Number(d.Availability) || 0 }))
-    return { carrier: carrier.name, days, error: null }
+    return { carrier: carrier.name, days: daysFrom(data), error: null }
   } catch (e) {
     // فشل JSON (صفحة دخول بدل بيانات) أو تعطّل الإطار — أبطل الجلسة احتياطاً
     await invalidateSession(carrier.code).catch(() => {})
