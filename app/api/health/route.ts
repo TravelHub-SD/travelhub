@@ -18,15 +18,18 @@ async function ping(url: string): Promise<boolean> {
   }
 }
 
+// علامة إصدار — لو ظهرت في الناتج يبقى الكود الجديد (الموصّلات المتعددة) منشور.
+const VERSION = "multi-connector-2"
+
 export async function GET() {
   const urls = connectorUrls()
-  if (!urls.length) return NextResponse.json({ ok: true, connector: "not-configured" })
+  if (!urls.length) return NextResponse.json({ ok: true, version: VERSION, configured: 0 })
 
   const settled = await Promise.all(urls.map((u) => ping(u)))
   const up = settled.filter(Boolean).length
   const allUp = up === urls.length
   return NextResponse.json(
-    { ok: allUp, connectors: `${up}/${urls.length}` },
+    { ok: allUp, version: VERSION, connectors: `${up}/${urls.length}` },
     { status: allUp ? 200 : 503 },
   )
 }
