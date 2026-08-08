@@ -1,5 +1,6 @@
 import { type NextRequest, NextResponse } from "next/server"
 import { rateLimit, clientIp, tooMany } from "@/lib/rate-limit"
+import { connectorUrls, connectorKey } from "@/lib/connector"
 
 // أيام الإتاحة (الأيام الخضراء) — وسيط لنقطة /availability في الموصّل.
 export const dynamic = "force-dynamic"
@@ -39,22 +40,39 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: "معاملات غير صالحة" }, { status: 400 })
   }
 
-  const url = process.env.SUDAN_CONNECTOR_URL
-  if (!url) return NextResponse.json({ days: mockDays(start, end), mock: true })
+  const urls = connectorUrls()
+  if (!urls.length) return NextResponse.json({ days: mockDays(start, end), mock: true })
 
-  try {
+  // استعلام كل الموصّلات بالتوازي ودمج أيامها (موصّل لكل خط ⇒ كل الوجهات).
+  const qs = `origin=${origin}&destination=${destination}&start=${start}&end=${end}`
+  const fetchOne = async (u: string): Promise<Record<string, number>> => {
     // Vercel المجاني يقطع عند ~٦٠ث. الموصّل يرجّع أيام المتوفّر ضمن مهلة لينة
-    // ويكمل باقي الخطوط بالخلفية ويخزّنها ٦ ساعات فيصبح المكرّر فورياً.
+    // ويكمل الباقي بالخلفية ويخزّنه ٦ ساعات فيصبح المكرّر فورياً.
     const controller = new AbortController()
     const t = setTimeout(() => controller.abort(), 62_000)
-    const res = await fetch(
-      `${url.replace(/\/$/, "")}/availability?origin=${origin}&destination=${destination}&start=${start}&end=${end}`,
-      { headers: { "x-connector-key": process.env.CONNECTOR_API_KEY ?? "" }, cache: "no-store", signal: controller.signal },
-    ).finally(() => clearTimeout(t))
-    if (!res.ok) return NextResponse.json({ days: {}, warnings: [`connector HTTP ${res.status}`] })
-    const data = await res.json()
-    return NextResponse.json({ days: data.days || {}, warnings: data.warnings })
-  } catch (e) {
-    return NextResponse.json({ days: {}, warnings: [e instanceof Error ? e.message : String(e)] })
+    try {
+      const res = await fetch(`${u}/availability?${qs}`, {
+        headers: { "x-connector-key": connectorKey() },
+        cache: "no-store",
+        signal: controller.signal,
+      })
+      if (!res.ok) return {}
+      const data = await res.json()
+      return (data?.days as Record<string, number>) || {}
+    } catch {
+      return {}
+    } finally {
+      clearTimeout(t)
+    }
   }
+
+  const settled = await Promise.allSettled(urls.map((u) => fetchOne(u)))
+  const days: Record<string, number> = {}
+  for (const r of settled) {
+    if (r.status !== "fulfilled") continue
+    for (const [date, seats] of Object.entries(r.value)) {
+      days[date] = Math.max(days[date] || 0, Number(seats) || 0)
+    }
+  }
+  return NextResponse.json({ days })
 }

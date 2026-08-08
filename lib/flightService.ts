@@ -12,6 +12,7 @@
  */
 
 import { getAirlineName, getAirlineLogo } from "@/lib/airlines"
+import { connectorUrls, connectorKey } from "@/lib/connector"
 
 // ─── الأنواع ─────────────────────────────────────────────────────────────────
 
@@ -64,23 +65,19 @@ export interface FlightSearchResponse {
 
 // ─── موصّل الخطوط السودانية (بوابة TTI) ───────────────────────────────────────
 
-async function fetchSudanFlights(
+// استعلام موصّل واحد (قد يخدم خطاً واحداً أو كل الخطوط).
+async function fetchFromConnector(
+  url: string,
   p: Required<SearchParams>,
 ): Promise<{ flights: Flight[]; warnings: string[] }> {
-  const url = process.env.SUDAN_CONNECTOR_URL
-  if (!url) return { flights: [], warnings: [] }
-
   const controller = new AbortController()
   // Vercel المجاني يقطع الدالة عند ~٦٠ث، فلا فائدة من تجاوزها. الموصّل يرجّع
-  // المتوفّر ضمن مهلة لينة (~٤٨ث) ويكمل باقي الخطوط بالخلفية ويخزّنها للمرّة التالية.
+  // المتوفّر ضمن مهلة لينة (~٤٨ث) ويكمل الباقي بالخلفية ويخزّنه للمرّة التالية.
   const timeout = setTimeout(() => controller.abort(), 62000)
   try {
-    const res = await fetch(`${url.replace(/\/$/, "")}/search`, {
+    const res = await fetch(`${url}/search`, {
       method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "x-connector-key": process.env.CONNECTOR_API_KEY ?? "",
-      },
+      headers: { "Content-Type": "application/json", "x-connector-key": connectorKey() },
       body: JSON.stringify(p),
       signal: controller.signal,
     })
@@ -92,6 +89,28 @@ async function fetchSudanFlights(
   } finally {
     clearTimeout(timeout)
   }
+}
+
+// يستعلم كل الموصّلات بالتوازي ويدمج نتائجها. عند تقسيم الموصّلات (موصّل لكل
+// خط) يعني أن كل الخطوط تعمل معاً فتظهر كلها بسرعة من أول بحث.
+async function fetchSudanFlights(
+  p: Required<SearchParams>,
+): Promise<{ flights: Flight[]; warnings: string[] }> {
+  const urls = connectorUrls()
+  if (!urls.length) return { flights: [], warnings: [] }
+
+  const settled = await Promise.allSettled(urls.map((u) => fetchFromConnector(u, p)))
+  const flights: Flight[] = []
+  const warnings: string[] = []
+  for (const r of settled) {
+    if (r.status === "fulfilled") {
+      flights.push(...r.value.flights)
+      warnings.push(...r.value.warnings)
+    } else {
+      warnings.push(`connector: ${r.reason instanceof Error ? r.reason.message : String(r.reason)}`)
+    }
+  }
+  return { flights, warnings }
 }
 
 // ─── بيانات تجريبية سودانية (SDG) ─────────────────────────────────────────────
@@ -177,7 +196,7 @@ export async function searchFlights(params: SearchParams): Promise<FlightSearchR
   const p: Required<SearchParams> = { origin, destination, departureDate, returnDate, adults, children, infants }
 
   // بلا موصّل → بيانات تجريبية سودانية (مع دعم الذهاب والعودة)
-  if (!process.env.SUDAN_CONNECTOR_URL) {
+  if (!connectorUrls().length) {
     const out = mockFlights(p)
     if (!returnDate) return out
     const back = mockFlights({ ...p, origin: destination, destination: origin, departureDate: returnDate })

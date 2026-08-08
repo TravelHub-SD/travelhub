@@ -49,6 +49,9 @@ export const config = {
   sdgPerUsd: num(process.env.SDG_PER_USD, 3650),
   mock: process.env.MOCK === "1",
   carriers, // [{ name, iata, login, password, code }]
+  // فضاء أسماء للكاش المشترك (Redis) — مشتقّ من خطوط هذه النسخة. عند تقسيم
+  // الموصّلات (نسخة لكل خط) يضمن ألّا تدهس نسخةٌ نتيجةَ أخرى بنفس المفتاح.
+  cacheNamespace: process.env.CACHE_NAMESPACE || carriers.map((c) => c.code).sort().join("-") || "all",
 }
 
 // محدّدات صفحات بوابة Zenith (TTI).

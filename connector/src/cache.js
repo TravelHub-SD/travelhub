@@ -3,12 +3,15 @@
 // يقرأون نفس النتيجة المخزّنة بدل تشغيل تصفّح حي لكل طلب.
 // بدون ضبط Redis يعمل بالذاكرة فقط (تطوير/نسخة واحدة).
 
+import { config } from "./config.js"
+
 const REDIS_URL = process.env.UPSTASH_REDIS_REST_URL || process.env.KV_REST_API_URL
 const REDIS_TOKEN = process.env.UPSTASH_REDIS_REST_TOKEN || process.env.KV_REST_API_TOKEN
 export const cacheShared = Boolean(REDIS_URL && REDIS_TOKEN)
 
 const mem = new Map() // L1: key → { value, expires }
-const PREFIX = "th:cache:"
+// فضاء أسماء لكل مجموعة خطوط — يمنع تداخل نسخ الموصّل المقسّمة على Redis المشترك.
+const PREFIX = `th:cache:${config.cacheNamespace}:`
 
 function memGet(key) {
   const hit = mem.get(key)

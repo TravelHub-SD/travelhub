@@ -1,6 +1,7 @@
 import { type NextRequest, NextResponse } from "next/server"
+import { connectorUrls, connectorKey } from "@/lib/connector"
 
-// هدف Vercel Cron — يشغّل تسخين الكاش للمسارات الشائعة على الموصّل.
+// هدف Vercel Cron — يشغّل تسخين الكاش للمسارات الشائعة على كل الموصّلات.
 // محميّ: Vercel يرسل Authorization: Bearer $CRON_SECRET تلقائياً للمهام المجدولة.
 export const dynamic = "force-dynamic"
 
@@ -13,17 +14,23 @@ export async function GET(request: NextRequest) {
     }
   }
 
-  const url = process.env.SUDAN_CONNECTOR_URL
-  if (!url) return NextResponse.json({ ok: false, reason: "no connector" })
+  const urls = connectorUrls()
+  if (!urls.length) return NextResponse.json({ ok: false, reason: "no connector" })
 
-  try {
-    const res = await fetch(`${url.replace(/\/$/, "")}/warm`, {
-      method: "POST",
-      headers: { "x-connector-key": process.env.CONNECTOR_API_KEY ?? "" },
-      cache: "no-store",
-    })
-    return NextResponse.json({ ok: res.ok, connector: await res.json().catch(() => null) })
-  } catch (e) {
-    return NextResponse.json({ ok: false, error: e instanceof Error ? e.message : String(e) })
+  const warmOne = async (u: string) => {
+    try {
+      const res = await fetch(`${u}/warm`, {
+        method: "POST",
+        headers: { "x-connector-key": connectorKey() },
+        cache: "no-store",
+      })
+      return res.ok
+    } catch {
+      return false
+    }
   }
+
+  const settled = await Promise.all(urls.map((u) => warmOne(u)))
+  const ok = settled.filter(Boolean).length
+  return NextResponse.json({ ok: ok === urls.length, warmed: `${ok}/${urls.length}` })
 }

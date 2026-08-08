@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server"
 import { rateLimit, tooMany } from "@/lib/rate-limit"
 import { headers } from "next/headers"
+import { connectorUrls, connectorKey } from "@/lib/connector"
 
 // قائمة احتياطية سودانية لو الموصّل غير مضبوط (بيئة التطوير مثلاً).
 const FALLBACK = [
@@ -28,17 +29,36 @@ export async function GET() {
   if (!rateLimit(`ap:${ip}`, 30, 60_000)) {
     return NextResponse.json(tooMany, { status: 429 })
   }
-  const url = process.env.SUDAN_CONNECTOR_URL
-  if (!url) return NextResponse.json({ airports: FALLBACK })
+  const urls = connectorUrls()
+  if (!urls.length) return NextResponse.json({ airports: FALLBACK })
+
+  // كل موصّل يعرف مطارات خطه فقط — نستعلمهم جميعاً ونوحّد القائمة (بلا تكرار).
+  const fetchOne = async (u: string): Promise<{ code: string; name: string }[]> => {
+    try {
+      const res = await fetch(`${u}/airports`, {
+        headers: { "x-connector-key": connectorKey() },
+        next: { revalidate: 3600 },
+      })
+      if (!res.ok) return []
+      const data = await res.json()
+      return Array.isArray(data) ? data : []
+    } catch {
+      return []
+    }
+  }
 
   try {
-    const res = await fetch(`${url.replace(/\/$/, "")}/airports`, {
-      headers: { "x-connector-key": process.env.CONNECTOR_API_KEY ?? "" },
-      next: { revalidate: 3600 },
-    })
-    if (!res.ok) return NextResponse.json({ airports: FALLBACK })
-    const data = await res.json()
-    const airports = Array.isArray(data) && data.length ? data : FALLBACK
+    const settled = await Promise.allSettled(urls.map((u) => fetchOne(u)))
+    const byCode = new Map<string, { code: string; name: string }>()
+    for (const r of settled) {
+      if (r.status !== "fulfilled") continue
+      for (const a of r.value) {
+        if (a && typeof a.code === "string" && !byCode.has(a.code)) byCode.set(a.code, a)
+      }
+    }
+    const airports = byCode.size
+      ? Array.from(byCode.values()).sort((a, b) => a.name.localeCompare(b.name))
+      : FALLBACK
     return NextResponse.json({ airports })
   } catch {
     return NextResponse.json({ airports: FALLBACK })
