@@ -1,60 +1,62 @@
 import { type NextRequest, NextResponse } from "next/server"
+import { searchFlights } from "@/lib/flightService"
+import { rateLimit, clientIp, tooMany } from "@/lib/rate-limit"
 
-async function getAmadeusToken() {
-  const response = await fetch("https://test.api.amadeus.com/v1/security/oauth2/token", {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/x-www-form-urlencoded",
-    },
-    body: new URLSearchParams({
-      grant_type: "client_credentials",
-      client_id: process.env.AMADEUS_CLIENT_ID!,
-      client_secret: process.env.AMADEUS_CLIENT_SECRET!,
-    }),
-  })
+// استغلال أقصى نافذة تنفيذ في خطة Vercel المجانية (٦٠ث) — البحث الحي مكلف.
+export const maxDuration = 60
 
-  if (!response.ok) {
-    throw new Error("فشل في الحصول على رمز المصادقة")
-  }
+const IATA = /^[A-Z]{3}$/
+const DATE = /^\d{4}-\d{2}-\d{2}$/
 
-  const data = await response.json()
-  return data.access_token
+function validDate(s: string): boolean {
+  if (!DATE.test(s)) return false
+  const d = new Date(`${s}T00:00:00Z`)
+  if (Number.isNaN(d.getTime())) return false
+  const today = new Date()
+  today.setUTCHours(0, 0, 0, 0)
+  const max = new Date(today)
+  max.setUTCFullYear(max.getUTCFullYear() + 1)
+  return d >= today && d <= max
 }
 
 export async function POST(request: NextRequest) {
+  // حد المعدّل: 10 عمليات بحث بالدقيقة لكل عنوان (البحث الحقيقي مكلف)
+  if (!rateLimit(`fs:${clientIp(request.headers)}`, 10, 60_000)) {
+    return NextResponse.json(tooMany, { status: 429 })
+  }
+
   try {
-    const body = await request.json()
-    const { origin, destination, departureDate, adults = 1 } = body
-
-    if (!origin || !destination || !departureDate) {
-      return NextResponse.json({ error: "يرجى إدخال جميع الحقول المطلوبة" }, { status: 400 })
+    const body = await request.json().catch(() => null)
+    if (!body || typeof body !== "object") {
+      return NextResponse.json({ error: "طلب غير صالح" }, { status: 400 })
     }
 
-    console.log("[v0] Searching flights:", { origin, destination, departureDate, adults })
+    const origin = String(body.origin || "").trim().toUpperCase()
+    const destination = String(body.destination || "").trim().toUpperCase()
+    const departureDate = String(body.departureDate || "").trim()
+    const tripType = String(body.tripType || "one-way")
+    const returnDateRaw = String(body.returnDate || "").trim()
+    // العودة تُعتبر فقط عند اختيار "ذهاب وعودة" وبتاريخ سليم بعد المغادرة
+    const returnDate =
+      tripType === "round-trip" && returnDateRaw && validDate(returnDateRaw) && returnDateRaw >= departureDate
+        ? returnDateRaw
+        : ""
+    const adults = Math.max(1, Math.min(9, Number(body.adults) || 1))
+    const children = Math.max(0, Math.min(8, Number(body.children) || 0))
+    const infants = Math.max(0, Math.min(adults, Number(body.infants) || 0))
 
-    const token = await getAmadeusToken()
-
-    const url = `https://test.api.amadeus.com/v2/shopping/flight-offers?originLocationCode=${origin}&destinationLocationCode=${destination}&departureDate=${departureDate}&adults=${adults}&currencyCode=USD&max=10`
-
-    const response = await fetch(url, {
-      headers: {
-        Authorization: `Bearer ${token}`,
-      },
-    })
-
-    if (!response.ok) {
-      console.error("[v0] API Error:", response.status, response.statusText)
-      const errorData = await response.json()
-      console.error("[v0] Error details:", errorData)
-      throw new Error("فشل البحث عن الرحلات")
+    if (!IATA.test(origin) || !IATA.test(destination) || origin === destination || !validDate(departureDate)) {
+      return NextResponse.json({ error: "يرجى إدخال بيانات بحث صحيحة" }, { status: 400 })
+    }
+    if (tripType === "round-trip" && returnDateRaw && !returnDate) {
+      return NextResponse.json({ error: "تاريخ العودة يجب أن يكون بعد تاريخ المغادرة" }, { status: 400 })
     }
 
-    const data = await response.json()
-    console.log("[v0] Flights found:", data.data?.length || 0)
-
-    return NextResponse.json(data)
+    const result = await searchFlights({ origin, destination, departureDate, returnDate, adults, children, infants })
+    return NextResponse.json(result)
   } catch (error) {
-    console.error("[v0] Error searching flights:", error)
+    // لا نسرّب تفاصيل داخلية للعميل — التفاصيل في سجلات الخادم فقط
+    console.error("[travelhub] flight search error:", error)
     return NextResponse.json({ error: "حدث خطأ أثناء البحث عن الرحلات" }, { status: 500 })
   }
 }

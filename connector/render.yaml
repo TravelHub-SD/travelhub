@@ -1,0 +1,31 @@
+# نشر موصّل TravelHub على Render.com
+# Render يقرأ هذا الملف تلقائياً (Blueprint) عند ربط المستودع.
+services:
+  - type: web
+    name: travelhub-connector
+    runtime: docker
+    dockerfilePath: ./Dockerfile
+    dockerContext: .
+    rootDir: connector
+    plan: free
+    region: frankfurt          # أقرب لأوروبا/السودان ولنظام TTI
+    healthCheckPath: /health
+    envVars:
+      - key: PORT
+        value: "8080"
+      - key: CONNECTOR_API_KEY
+        sync: false            # تُدخل يدوياً في لوحة Render (سرّي)
+      - key: TTI_CARRIERS
+        sync: false
+      - key: TTI_PORTAL_URL
+        value: https://emea.ttinteractive.com/newUI/index.asp
+      - key: SDG_PER_USD
+        value: "3650"
+      - key: KV_REST_API_URL
+        sync: false
+      - key: KV_REST_API_TOKEN
+        sync: false
+      - key: BROWSER_CONCURRENCY
+        value: "1"             # خطة Render المجانية 512MB ضيّقة — متصفح واحد فقط للأمان
+      - key: CACHE_TTL_SECONDS
+        value: "300"

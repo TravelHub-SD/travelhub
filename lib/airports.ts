@@ -420,3 +420,23 @@ export function searchAirports(query: string) {
       airport.country.includes(query),
   )
 }
+
+// خريطة كود ← اسم عربي (للعرض في النتائج)
+const NAME_AR_BY_CODE: Record<string, string> = Object.fromEntries(
+  popularAirports.map((a) => [a.code, a.nameAr]),
+)
+
+/** اسم المدينة بالعربي من كود IATA — يرجع الكود نفسه إن لم يُعرف. */
+export function airportNameAr(code?: string): string {
+  if (!code) return ""
+  const up = code.toUpperCase()
+  return NAME_AR_BY_CODE[up] || up
+}
+
+/** تسمية واضحة للعميل: "جدة (JED)" — أو الكود وحده إن لم يُعرف الاسم. */
+export function airportLabel(code?: string): string {
+  if (!code) return ""
+  const up = code.toUpperCase()
+  const name = NAME_AR_BY_CODE[up]
+  return name ? `${name} (${up})` : up
+}
