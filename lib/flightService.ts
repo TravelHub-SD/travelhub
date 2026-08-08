@@ -71,8 +71,9 @@ async function fetchSudanFlights(
   if (!url) return { flights: [], warnings: [] }
 
   const controller = new AbortController()
-  // الذهاب والعودة = ضعف عمليات الأتمتة، فنمنحه مهلة أطول
-  const timeout = setTimeout(() => controller.abort(), p.returnDate ? 120000 : 60000)
+  // Vercel المجاني يقطع الدالة عند ~٦٠ث، فلا فائدة من تجاوزها. الموصّل يرجّع
+  // المتوفّر ضمن مهلة لينة (~٤٨ث) ويكمل باقي الخطوط بالخلفية ويخزّنها للمرّة التالية.
+  const timeout = setTimeout(() => controller.abort(), 62000)
   try {
     const res = await fetch(`${url.replace(/\/$/, "")}/search`, {
       method: "POST",

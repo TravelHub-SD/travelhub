@@ -3,6 +3,8 @@ import { rateLimit, clientIp, tooMany } from "@/lib/rate-limit"
 
 // أيام الإتاحة (الأيام الخضراء) — وسيط لنقطة /availability في الموصّل.
 export const dynamic = "force-dynamic"
+// استغلال أقصى نافذة تنفيذ في خطة Vercel المجانية (٦٠ث) لأول نداء لمسار جديد.
+export const maxDuration = 60
 
 // نمط تجريبي (إثنين/خميس) عند غياب الموصّل — لبيئة التطوير.
 function mockDays(start: string, end: string) {
@@ -41,9 +43,10 @@ export async function GET(request: NextRequest) {
   if (!url) return NextResponse.json({ days: mockDays(start, end), mock: true })
 
   try {
-    // مهلة 55 ثانية — أول نداء لمسار جديد قد يفتح نموذج الحجز لاكتشاف مسار المحرّك
+    // Vercel المجاني يقطع عند ~٦٠ث. الموصّل يرجّع أيام المتوفّر ضمن مهلة لينة
+    // ويكمل باقي الخطوط بالخلفية ويخزّنها ٦ ساعات فيصبح المكرّر فورياً.
     const controller = new AbortController()
-    const t = setTimeout(() => controller.abort(), 55_000)
+    const t = setTimeout(() => controller.abort(), 62_000)
     const res = await fetch(
       `${url.replace(/\/$/, "")}/availability?origin=${origin}&destination=${destination}&start=${start}&end=${end}`,
       { headers: { "x-connector-key": process.env.CONNECTOR_API_KEY ?? "" }, cache: "no-store", signal: controller.signal },

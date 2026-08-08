@@ -2,6 +2,9 @@ import { type NextRequest, NextResponse } from "next/server"
 import { searchFlights } from "@/lib/flightService"
 import { rateLimit, clientIp, tooMany } from "@/lib/rate-limit"
 
+// استغلال أقصى نافذة تنفيذ في خطة Vercel المجانية (٦٠ث) — البحث الحي مكلف.
+export const maxDuration = 60
+
 const IATA = /^[A-Z]{3}$/
 const DATE = /^\d{4}-\d{2}-\d{2}$/
 

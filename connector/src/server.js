@@ -126,17 +126,45 @@ app.get("/availability", async (req, res) => {
     return res.json(payload)
   }
 
-  const results = await Promise.all(
-    config.carriers.map((c) => getCarrierAvailability(c, { origin, destination, start, end })),
-  )
-  const days = {}
-  for (const r of results) {
-    for (const d of r.days) days[d.date] = Math.max(days[d.date] || 0, d.seats)
+  // على متصفح واحد تتتابع أيام الخطوط, فقد يتجاوز مجموعها نافذة Vercel (٦٠ث).
+  // نرجّع أيام ما جهز ضمن مهلة لينة، ونكمل الباقي بالخلفية ونخبّئ الكامل ٦ ساعات.
+  const jobs = config.carriers.map((c) => getCarrierAvailability(c, { origin, destination, start, end }))
+  const done = new Array(jobs.length).fill(null)
+  jobs.forEach((p, i) => {
+    p.then((r) => { done[i] = r }, () => {})
+  })
+
+  const mergeDays = () => {
+    const days = {}
+    for (const r of done) {
+      if (!r) continue
+      for (const d of r.days) days[d.date] = Math.max(days[d.date] || 0, d.seats)
+    }
+    return days
   }
-  const warnings = results.filter((r) => r.error).map((r) => `${r.carrier}: ${r.error}`)
-  const payload = { days, carriers: results.map((r) => r.carrier), warnings }
-  if (Object.keys(days).length > 0) await cacheSet(cacheKey, payload, AVAIL_TTL_MS)
-  res.json(payload)
+
+  const allP = Promise.allSettled(jobs)
+  // إكمال بالخلفية: عند انتهاء كل الخطوط نخبّئ اليوم الكامل (٦ ساعات)
+  allP
+    .then(() => {
+      const days = mergeDays()
+      if (Object.keys(days).length > 0) {
+        const warnings = done.filter((r) => r?.error).map((r) => `${r.carrier}: ${r.error}`)
+        cacheSet(
+          cacheKey,
+          { days, carriers: done.filter(Boolean).map((r) => r.carrier), warnings },
+          AVAIL_TTL_MS,
+        ).catch(() => {})
+      }
+    })
+    .catch(() => {})
+
+  // انتظر الكل أو مهلة لينة (٤٨ث) أيهما أسبق
+  await Promise.race([allP, new Promise((r) => setTimeout(r, 48_000))])
+
+  const days = mergeDays()
+  const warnings = done.filter((r) => r?.error).map((r) => `${r.carrier}: ${r.error}`)
+  res.json({ days, carriers: done.filter(Boolean).map((r) => r.carrier), warnings, partial: !done.every(Boolean) })
 })
 
 // ─── التسخين المسبق للمسارات الشائعة ─────────────────────────────────────────
@@ -276,27 +304,61 @@ async function doSearch({ origin, destination, departureDate, returnDate, adults
     // بحث فعلي: وضع "Round trip" الأصلي في النظام — بحث واحد لكل خط
     // يرجّع الاتجاهين معاً (التطبيع يوسم كل رحلة ذهاب/عودة تلقائياً).
     const nativeParams = retParams ? { ...outParams, returnDate: retParams.departureDate } : outParams
-    const results = await Promise.all(config.carriers.map((c) => searchCarrier(c, nativeParams)))
-    const data = results.flatMap((r) => r.flights)
-    const warnings = results.filter((r) => r.error).map((r) => `${r.carrier}: ${r.error}`)
+    const jobs = config.carriers.map((c) => searchCarrier(c, nativeParams))
+    const done = new Array(jobs.length).fill(null)
+    jobs.forEach((p, i) => {
+      p.then((r) => { done[i] = r }, () => {})
+    })
 
-    // شبكة أمان: لو البحث الموحّد ما رجّع رحلات عودة، نكمّلها ببحث الاتجاه المعاكس
-    if (retParams && data.length && !data.some((f) => f.leg === "عودة")) {
-      warnings.push("العودة لم تُقرأ من البحث الموحّد — نُفّذ بحث الاتجاه المعاكس احتياطاً")
-      const backResults = await Promise.all(config.carriers.map((c) => searchCarrier(c, retParams)))
-      for (const r of backResults) {
-        data.push(...r.flights.map((f) => ({ ...f, leg: "عودة" })))
-        if (r.error) warnings.push(`${r.carrier} (عودة): ${r.error}`)
-      }
-      data.forEach((f) => {
-        if (!f.leg) f.leg = "ذهاب"
-      })
+    // يجمّع رحلات ما اكتمل حتى الآن (للردّ السريع، بلا شبكة أمان العودة)
+    const assemble = () => {
+      const results = done.filter(Boolean)
+      const data = results.flatMap((r) => r.flights)
+      const warnings = results.filter((r) => r.error).map((r) => `${r.carrier}: ${r.error}`)
+      data.sort((a, b) => Number(a.price.total) - Number(b.price.total))
+      return { data, warnings }
     }
-    data.sort((a, b) => Number(a.price.total) - Number(b.price.total))
 
-    const payload = { data, meta: { source: "tti", carriers: config.carriers.map((c) => c.name), warnings } }
-    if (data.length) await cacheSet(cacheKey, payload, config.cacheTtlMs) // لا نخبّئ فشلاً
-    return payload
+    // بعد اكتمال كل الخطوط: أضف شبكة أمان العودة، رتّب، وخبّئ النتيجة الكاملة
+    const finalize = async () => {
+      const results = done.filter(Boolean)
+      const data = results.flatMap((r) => r.flights)
+      const warnings = results.filter((r) => r.error).map((r) => `${r.carrier}: ${r.error}`)
+      // شبكة أمان: لو البحث الموحّد ما رجّع رحلات عودة، نكمّلها ببحث الاتجاه المعاكس
+      if (retParams && data.length && !data.some((f) => f.leg === "عودة")) {
+        warnings.push("العودة لم تُقرأ من البحث الموحّد — نُفّذ بحث الاتجاه المعاكس احتياطاً")
+        const backResults = await Promise.all(config.carriers.map((c) => searchCarrier(c, retParams)))
+        for (const r of backResults) {
+          data.push(...r.flights.map((f) => ({ ...f, leg: "عودة" })))
+          if (r.error) warnings.push(`${r.carrier} (عودة): ${r.error}`)
+        }
+        data.forEach((f) => {
+          if (!f.leg) f.leg = "ذهاب"
+        })
+      }
+      data.sort((a, b) => Number(a.price.total) - Number(b.price.total))
+      const payload = { data, meta: { source: "tti", carriers: config.carriers.map((c) => c.name), warnings } }
+      if (data.length) await cacheSet(cacheKey, payload, config.cacheTtlMs) // لا نخبّئ فشلاً
+      return payload
+    }
+
+    const allP = Promise.allSettled(jobs)
+    // انتظر اكتمال الكل أو مهلة لينة (٤٨ث) أيهما أسبق — لنبقى ضمن نافذة Vercel (٦٠ث)
+    await Promise.race([allP, new Promise((r) => setTimeout(r, 48_000))])
+
+    if (done.every(Boolean)) {
+      // الكل جاهز → أكمل شبكة الأمان، خبّئ، وأرجِع الكامل
+      return await finalize()
+    }
+
+    // بعض الخطوط لم تكتمل بعد → أرجِع المتوفّر الآن، وأكمل الباقي بالخلفية ليُخبّأ
+    // الكامل، فيجيبه البحث التالي لنفس المسار فوراً من الكاش.
+    allP.then(() => finalize()).catch(() => {})
+    const partial = assemble()
+    return {
+      data: partial.data,
+      meta: { source: "tti", carriers: config.carriers.map((c) => c.name), warnings: partial.warnings, partial: true },
+    }
   })()
 
   pendingSearches.set(cacheKey, run)
