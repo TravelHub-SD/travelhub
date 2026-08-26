@@ -135,17 +135,16 @@ function SmartImg({ src, alt, className }: { src: string; alt: string; className
   return <img src={src || "/placeholder.svg"} alt={alt} className={className} onError={() => setErr(true)} />
 }
 
-// شعار TravelHub الأصلي، مع بديل نصّي احتياطي
+// شعار TravelHub — الأيقونة الأصلية (الدبوس + الطائرة) + الاسم، مع بديل نصّي احتياطي
 function Logo() {
   const [err, setErr] = useState(false)
-  // لوغو أفقي: الأيقونة (المقتطعة) + اسم واضح — بديل نصّي إن فشلت الصورة
   return (
-    <span className="flex items-center gap-2">
+    <span className="flex items-center gap-2.5">
       {!err && (
         <img
-          src="/travelhub-icon.png"
-          alt="Travel Hub"
-          className="h-10 w-auto object-contain shrink-0"
+          src="/brand-icon.png"
+          alt="Travel Hub ترافل هب"
+          className="h-11 w-auto object-contain shrink-0"
           onError={() => setErr(true)}
         />
       )}

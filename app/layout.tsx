@@ -59,8 +59,8 @@ export const metadata: Metadata = {
     googleBot: { index: true, follow: true, "max-image-preview": "large" },
   },
   icons: {
-    icon: "/travelhub-icon.png",
-    apple: "/travelhub-icon.png",
+    icon: "/brand-icon.png",
+    apple: "/brand-icon.png",
   },
 }
 
