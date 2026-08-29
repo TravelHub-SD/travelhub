@@ -1,0 +1,78 @@
+# ─────────────────────────────────────────────────────────────
+# تحديث خزينة TravelHub (Supabase) — مجدوِل مجاني عبر GitHub Actions.
+#
+#  • الأسعار: كل ليلة 00:00 بتوقيت السودان (21:00 UTC) — تبحث الأيام التي بها
+#    رحلات فعلاً (حسب جدول الإتاحة) بميزانية وقت ثابتة وتستأنف من حيث توقّفت.
+#  • الإتاحة (الأيام الخضراء): مرة أسبوعياً — الجمعة 23:00 بتوقيت السودان.
+#
+# الأسرار المطلوبة في: Settings → Secrets and variables → Actions
+#   CONNECTOR_API_KEY   مفتاح الموصّل
+#   CONNECTOR_URLS      روابط الموصّلات مفصولة بفاصلة
+# ─────────────────────────────────────────────────────────────
+name: Refresh flight store
+
+on:
+  schedule:
+    - cron: "0 21 * * *"   # يومياً 00:00 بتوقيت السودان (UTC+3) — الأسعار
+    - cron: "0 20 * * 5"   # الجمعة 23:00 بتوقيت السودان — الإتاحة الأسبوعية
+  workflow_dispatch:        # تشغيل يدوي من تبويب Actions
+    inputs:
+      phase:
+        description: "أي مرحلة تشغّل؟"
+        required: true
+        default: prices
+        type: choice
+        options: [prices, availability]
+
+jobs:
+  refresh:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: تحديد المرحلة
+        id: phase
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            echo "value=${{ inputs.phase }}" >> "$GITHUB_OUTPUT"
+          elif [ "${{ github.event.schedule }}" = "0 20 * * 5" ]; then
+            echo "value=availability" >> "$GITHUB_OUTPUT"
+          else
+            echo "value=prices" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: إطلاق الزحف على كل الموصّلات
+        env:
+          KEY: ${{ secrets.CONNECTOR_API_KEY }}
+          URLS: ${{ secrets.CONNECTOR_URLS }}
+          PHASE: ${{ steps.phase.outputs.value }}
+        run: |
+          set -u
+          if [ -z "${URLS:-}" ]; then echo "::error::CONNECTOR_URLS غير مضبوط"; exit 1; fi
+
+          if [ "$PHASE" = "availability" ]; then
+            PATH_Q="crawl/availability?minutes=60&months=2"
+          else
+            PATH_Q="crawl/prices?minutes=180&days=30"
+          fi
+
+          IFS=',' read -ra LIST <<< "$URLS"
+          fail=0
+          for raw in "${LIST[@]}"; do
+            url="$(echo "$raw" | xargs)"; url="${url%/}"
+            [ -z "$url" ] && continue
+            echo "── $url ($PHASE)"
+
+            # أيقظ الخدمة أولاً (خطة مجانية قد تكون نائمة) ثم أطلق الزحف
+            curl -s -o /dev/null --max-time 90 "$url/health" || true
+
+            code=$(curl -s -o /tmp/out.json -w "%{http_code}" --max-time 60 \
+              -X POST -H "x-connector-key: $KEY" "$url/$PATH_Q" || echo 000)
+            echo "   HTTP $code — $(head -c 300 /tmp/out.json 2>/dev/null)"
+            [ "$code" = "200" ] || fail=1
+          done
+
+          # الزحف يكمل بالخلفية على الخدمة نفسها؛ هنا نتحقق فقط من نجاح الإطلاق.
+          if [ "$fail" = "1" ]; then
+            echo "::warning::فشل إطلاق الزحف على موصّل واحد أو أكثر"
+          fi
+          echo "✅ تم إطلاق مرحلة $PHASE"

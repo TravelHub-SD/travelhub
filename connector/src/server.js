@@ -9,6 +9,8 @@ import { cacheGet, cacheSet } from "./cache.js"
 import { searchCarrier, listCarrierAirports, inspectBooking, getCarrierAvailability } from "./tti.js"
 import { mockCarrierFlights } from "./mock.js"
 import { shutdownBrowser } from "./browser.js"
+import { crawlAvailability, crawlPrices, crawlerBusy } from "./crawler.js"
+import { storeEnabled, saveAvailability, saveFlights } from "./store.js"
 
 const app = express()
 app.disable("x-powered-by") // إخفاء بصمة Express
@@ -131,7 +133,13 @@ app.get("/availability", async (req, res) => {
   const jobs = config.carriers.map((c) => getCarrierAvailability(c, { origin, destination, start, end }))
   const done = new Array(jobs.length).fill(null)
   jobs.forEach((p, i) => {
-    p.then((r) => { done[i] = r }, () => {})
+    p.then((r) => {
+      done[i] = r
+      // خزّن الأيام في Supabase — تبقى متاحة فوراً للجميع لاحقاً
+      if (storeEnabled && r?.days?.length) {
+        saveAvailability(origin, destination, r.carrier, r.days).catch(() => {})
+      }
+    }, () => {})
   })
 
   const mergeDays = () => {
@@ -224,6 +232,32 @@ app.post("/warm", (_req, res) => {
   if (!config.warmEnabled) return res.json({ started: false, disabled: true })
   res.json({ started: true, routes: POPULAR_ROUTES.length }) // رد فوري
   warmPopular().catch(() => {}) // يعمل بالخلفية عبر محدِّد التزامن
+})
+
+// ─── الزحف المسبق إلى Supabase (يُستدعى من جدولة GitHub Actions) ─────────────
+// نردّ فوراً ونُكمل بالخلفية: المُجدوِل لا ينتظر ساعات، والعمل محكوم بميزانية وقت.
+const minutes = (v, def) => Math.max(1, Math.min(600, Number(v) || def)) * 60_000
+
+app.post("/crawl/availability", (req, res) => {
+  if (!storeEnabled) return res.status(400).json({ ok: false, reason: "supabase غير مضبوط" })
+  if (crawlerBusy()) return res.json({ started: false, reason: "زحف آخر يعمل" })
+  const budgetMs = minutes(req.query.minutes, 60)
+  const months = Math.max(1, Math.min(6, Number(req.query.months) || 2))
+  res.json({ started: true, phase: "availability", budgetMinutes: budgetMs / 60_000, months })
+  crawlAvailability({ budgetMs, months })
+    .then((r) => console.log("[crawl] availability:", JSON.stringify(r)))
+    .catch((e) => console.error("[crawl] availability failed:", e?.message || e))
+})
+
+app.post("/crawl/prices", (req, res) => {
+  if (!storeEnabled) return res.status(400).json({ ok: false, reason: "supabase غير مضبوط" })
+  if (crawlerBusy()) return res.json({ started: false, reason: "زحف آخر يعمل" })
+  const budgetMs = minutes(req.query.minutes, 180)
+  const horizonDays = Math.max(1, Math.min(90, Number(req.query.days) || 30))
+  res.json({ started: true, phase: "prices", budgetMinutes: budgetMs / 60_000, horizonDays })
+  crawlPrices({ budgetMs, horizonDays })
+    .then((r) => console.log("[crawl] prices:", JSON.stringify(r)))
+    .catch((e) => console.error("[crawl] prices failed:", e?.message || e))
 })
 
 // أداة فحص تشخيصية — معطّلة افتراضياً؛ فعّلها مؤقتاً بمتغيّر البيئة INSPECT_ENABLED=1
@@ -338,7 +372,20 @@ async function doSearch({ origin, destination, departureDate, returnDate, adults
       }
       data.sort((a, b) => Number(a.price.total) - Number(b.price.total))
       const payload = { data, meta: { source: "tti", carriers: config.carriers.map((c) => c.name), warnings } }
-      if (data.length) await cacheSet(cacheKey, payload, config.cacheTtlMs) // لا نخبّئ فشلاً
+      if (data.length) {
+        await cacheSet(cacheKey, payload, config.cacheTtlMs) // لا نخبّئ فشلاً
+        // خزّن أيضاً في Supabase (ذهاب فقط) — كل بحث حيّ يغذّي الخزينة الدائمة
+        if (storeEnabled && !returnDate) {
+          saveFlights({
+            origin,
+            destination,
+            departDate: departureDate,
+            paxKey: `${adults}-${children}-${infants}`,
+            source: config.cacheNamespace,
+            flights: data,
+          }).catch(() => {})
+        }
+      }
       return payload
     }
 

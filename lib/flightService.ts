@@ -13,6 +13,7 @@
 
 import { getAirlineName, getAirlineLogo } from "@/lib/airlines"
 import { connectorUrls, connectorKey } from "@/lib/connector"
+import { storedFlights } from "@/lib/store"
 
 // ─── الأنواع ─────────────────────────────────────────────────────────────────
 
@@ -60,7 +61,7 @@ export interface SearchParams {
 
 export interface FlightSearchResponse {
   data: Flight[]
-  meta: { source: string; currency: string; warnings?: string[] }
+  meta: { source: string; currency: string; warnings?: string[]; updatedAt?: string }
 }
 
 // ─── موصّل الخطوط السودانية (بوابة TTI) ───────────────────────────────────────
@@ -209,6 +210,19 @@ export async function searchFlights(params: SearchParams): Promise<FlightSearchR
     }
   }
 
+  // ① الخزينة أولاً (ذهاب فقط) — رد فوري من نتائج الزحف الليلي بلا تشغيل متصفح.
+  // نعرض عمر البيانات ليتحقّق العميل من السعر حيّاً قبل الحجز.
+  if (!returnDate) {
+    const hit = await storedFlights(origin, destination, departureDate, `${adults}-${children}-${infants}`)
+    if (hit) {
+      return {
+        data: hit.flights,
+        meta: { source: "store", currency: "SDG", updatedAt: hit.updatedAt },
+      }
+    }
+  }
+
+  // ② لا بيانات مخزّنة → بحث حيّ (يُخزَّن تلقائياً للمرات القادمة)
   const { flights, warnings } = await fetchSudanFlights(p)
   const data = [...flights].sort(
     (a, b) => Number.parseFloat(a.price.total) - Number.parseFloat(b.price.total),
