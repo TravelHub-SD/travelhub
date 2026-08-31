@@ -1,6 +1,7 @@
 import { type NextRequest, NextResponse } from "next/server"
 import { rateLimit, clientIp, tooMany } from "@/lib/rate-limit"
 import { connectorUrls, connectorKey } from "@/lib/connector"
+import { storedAvailability } from "@/lib/store"
 
 // أيام الإتاحة (الأيام الخضراء) — وسيط لنقطة /availability في الموصّل.
 export const dynamic = "force-dynamic"
@@ -40,6 +41,13 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: "معاملات غير صالحة" }, { status: 400 })
   }
 
+  // ① الخزينة أولاً — رد فوري بلا تشغيل متصفح (الزحف الأسبوعي يملؤها لكل الوجهات)
+  const stored = await storedAvailability(origin, destination, start, end)
+  if (stored && Object.keys(stored).length) {
+    return NextResponse.json({ days: stored, source: "store" })
+  }
+
+  // ② لا بيانات مخزّنة → اجلبها حيّاً (وتُخزَّن تلقائياً للمرات القادمة)
   const urls = connectorUrls()
   if (!urls.length) return NextResponse.json({ days: mockDays(start, end), mock: true })
 
