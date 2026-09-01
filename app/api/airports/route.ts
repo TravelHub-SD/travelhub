@@ -2,6 +2,7 @@ import { NextResponse } from "next/server"
 import { rateLimit, tooMany } from "@/lib/rate-limit"
 import { headers } from "next/headers"
 import { connectorUrls, connectorKey } from "@/lib/connector"
+import { storedAirports } from "@/lib/store"
 
 // قائمة احتياطية سودانية لو الموصّل غير مضبوط (بيئة التطوير مثلاً).
 const FALLBACK = [
@@ -29,6 +30,11 @@ export async function GET() {
   if (!rateLimit(`ap:${ip}`, 30, 60_000)) {
     return NextResponse.json(tooMany, { status: 429 })
   }
+  // ① الخزينة أولاً — رد فوري حتى والموصّل نائم (الزحف يحدّثها دورياً)
+  const stored = await storedAirports()
+  if (stored?.length) return NextResponse.json({ airports: stored })
+
+  // ② لا بيانات مخزّنة → اسأل الموصّلات (وتُخزَّن عندها للمرات القادمة)
   const urls = connectorUrls()
   if (!urls.length) return NextResponse.json({ airports: FALLBACK })
 
