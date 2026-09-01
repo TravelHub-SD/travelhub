@@ -15,6 +15,7 @@ import { getCarrierAvailability, searchCarrier, listCarrierAirports } from "./tt
 import {
   storeEnabled,
   saveAvailability,
+  saveAirports,
   listUpcomingAvailability,
   saveFlights,
   listFreshKeys,
@@ -41,7 +42,7 @@ const priorityRank = (o, d) => {
 let running = false
 
 // ── ① الإتاحة: كل الأزواج الممكنة من مطارات النظام ──────────────
-export async function crawlAvailability({ budgetMs = 60 * 60_000, months = 2 } = {}) {
+export async function crawlAvailability({ budgetMs = 60 * 60_000, months = 3 } = {}) {
   if (!storeEnabled) return { ok: false, reason: "supabase غير مضبوط" }
   if (running) return { ok: false, reason: "زحف آخر يعمل" }
   if (config.mock || !config.carriers.length) return { ok: false, reason: "لا خطوط حقيقية" }
@@ -56,6 +57,10 @@ export async function crawlAvailability({ budgetMs = 60 * 60_000, months = 2 } =
     for (const c of config.carriers) Object.assign(merged, await listCarrierAirports(c))
     const codes = Object.keys(merged).filter((c) => /^[A-Z]{3}$/.test(c))
     if (!codes.length) return { ok: false, reason: "تعذّر قراءة المطارات" }
+    // خزّن قائمة المطارات ليقرأها الموقع فوراً (بلا انتظار إيقاظ الموصّل)
+    await saveAirports(
+      codes.map((code) => ({ code, name: merged[code] || code })),
+    ).catch(() => {})
 
     // كل الأزواج، مرتّبة بالأهمية
     const pairs = []
@@ -66,13 +71,15 @@ export async function crawlAvailability({ budgetMs = 60 * 60_000, months = 2 } =
     const stateId = `avail:${config.cacheNamespace}`
     const start = (await getCrawlState(stateId))?.i ?? 0
 
-    // نطاقات الأشهر
-    const now = new Date()
+    // نطاقات زمنية تبدأ من **اليوم** وتمتد قُدُماً (لا من أول الشهر الحالي،
+    // وإلا ضاع جزء من الميزانية على أيام فائتة ولم نصل للأشهر البعيدة).
+    // نقسّمها إلى شرائح ~٣٠ يوماً لأن نداء الإتاحة يُرجّع نطاقاً محدوداً.
     const ranges = []
+    const startAt = new Date()
     for (let m = 0; m < months; m++) {
-      const first = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + m, 1))
-      const last = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + m + 1, 0))
-      ranges.push([iso(first), iso(last)])
+      const from = new Date(startAt.getTime() + m * 30 * DAY_MS)
+      const to = new Date(startAt.getTime() + ((m + 1) * 30 - 1) * DAY_MS)
+      ranges.push([iso(from), iso(to)])
     }
 
     let i = start

@@ -10,7 +10,7 @@ import { searchCarrier, listCarrierAirports, inspectBooking, getCarrierAvailabil
 import { mockCarrierFlights } from "./mock.js"
 import { shutdownBrowser } from "./browser.js"
 import { crawlAvailability, crawlPrices, crawlerBusy } from "./crawler.js"
-import { storeEnabled, saveAvailability, saveFlights } from "./store.js"
+import { storeEnabled, saveAvailability, saveFlights, saveAirports } from "./store.js"
 
 const app = express()
 app.disable("x-powered-by") // إخفاء بصمة Express
@@ -88,7 +88,11 @@ async function refreshAirports() {
     const data = Object.entries(merged)
       .map(([code, name]) => ({ code, name }))
       .sort((a, b) => a.name.localeCompare(b.name))
-    if (data.length) airportsCache = { t: Date.now(), data }
+    if (data.length) {
+      airportsCache = { t: Date.now(), data }
+      // خزّنها في Supabase ليقرأها الموقع فوراً حتى والموصّل نائم
+      saveAirports(data).catch(() => {})
+    }
   } catch {
     /* نُبقي القائمة الاحتياطية */
   } finally {

@@ -50,7 +50,7 @@ jobs:
           if [ -z "${URLS:-}" ]; then echo "::error::CONNECTOR_URLS غير مضبوط"; exit 1; fi
 
           if [ "$PHASE" = "availability" ]; then
-            PATH_Q="crawl/availability?minutes=60&months=2"
+            PATH_Q="crawl/availability?minutes=60&months=3"
           else
             PATH_Q="crawl/prices?minutes=180&days=30"
           fi

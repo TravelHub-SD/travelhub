@@ -49,6 +49,17 @@ async function upsert(table, rows) {
   }
 }
 
+// ─── مطارات النظام ───────────────────────────────────────────
+// تُخزَّن مرة ويقرأها الموقع فوراً، فلا ينتظر الزائر إيقاظ الموصّل.
+export async function saveAirports(list) {
+  if (!storeEnabled || !list?.length) return
+  const now = new Date().toISOString()
+  await upsert(
+    "airports",
+    list.map((a) => ({ code: a.code, name: a.name, updated_at: now })),
+  )
+}
+
 // ─── أيام الإتاحة ────────────────────────────────────────────
 export async function saveAvailability(origin, destination, carrier, days) {
   if (!storeEnabled) return

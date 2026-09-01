@@ -29,6 +29,13 @@ async function rest<T>(path: string, timeoutMs = 6000): Promise<T | null> {
   }
 }
 
+// ─── مطارات النظام المخزّنة ──────────────────────────────────────────────────
+// تُقرأ فوراً حتى والموصّل نائم، فلا ينتظر الزائر تحميل القوائم.
+export async function storedAirports(): Promise<{ code: string; name: string }[] | null> {
+  const rows = await rest<{ code: string; name: string }[]>("airports?select=code,name&order=name.asc&limit=500")
+  return rows?.length ? rows : null
+}
+
 // ─── الأيام الخضراء المخزّنة ─────────────────────────────────────────────────
 export async function storedAvailability(
   origin: string,
