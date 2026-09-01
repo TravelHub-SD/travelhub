@@ -97,6 +97,9 @@ export async function crawlAvailability({ budgetMs = 60 * 60_000, months = 3 } =
         }
       }
       done++
+      // سجّل الموضع أولاً بأول — لو أُوقفت الخدمة فجأة نستأنف من هنا
+      // بدل أن نفقد تقدّم الجولة كلها.
+      if (done % 5 === 0) await setCrawlState(stateId, { i: i + 1 }).catch(() => {})
     }
     // لفّة كاملة → نبدأ من الأول في المرة القادمة
     await setCrawlState(stateId, { i: i >= pairs.length ? 0 : i }).catch(() => {})
