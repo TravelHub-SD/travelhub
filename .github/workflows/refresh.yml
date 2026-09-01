@@ -27,7 +27,8 @@ on:
 jobs:
   refresh:
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    # يجب أن يغطّي مدة الزحف كاملة، لأن هذه الوظيفة تُبقي الخدمة صاحية أثناءه.
+    timeout-minutes: 190
     steps:
       - name: تحديد المرحلة
         id: phase
@@ -50,16 +51,18 @@ jobs:
           if [ -z "${URLS:-}" ]; then echo "::error::CONNECTOR_URLS غير مضبوط"; exit 1; fi
 
           if [ "$PHASE" = "availability" ]; then
-            PATH_Q="crawl/availability?minutes=60&months=3"
+            BUDGET=50; PATH_Q="crawl/availability?minutes=${BUDGET}&months=3"
           else
-            PATH_Q="crawl/prices?minutes=180&days=30"
+            BUDGET=170; PATH_Q="crawl/prices?minutes=${BUDGET}&days=30"
           fi
 
           IFS=',' read -ra LIST <<< "$URLS"
+          URL_LIST=()
           fail=0
           for raw in "${LIST[@]}"; do
             url="$(echo "$raw" | xargs)"; url="${url%/}"
             [ -z "$url" ] && continue
+            URL_LIST+=("$url")
             echo "── $url ($PHASE)"
 
             # أيقظ الخدمة أولاً (خطة مجانية قد تكون نائمة) ثم أطلق الزحف
@@ -70,6 +73,23 @@ jobs:
             echo "   HTTP $code — $(head -c 300 /tmp/out.json 2>/dev/null)"
             [ "$code" = "200" ] || fail=1
           done
+
+          # ── إبقاء الخدمة صاحية أثناء الزحف فقط ──────────────────────────
+          # الخطة المجانية تُنيم الخدمة بعد ١٥ دقيقة بلا طلبات وارِدة، والزحف
+          # يعمل في الخلفية بلا طلبات — فكان يُقتل في منتصفه. نطرق /health كل
+          # ٤ دقائق طوال مدة الزحف فقط، فتبقى صاحية أثناءه وتنام بعده مباشرة
+          # (فلا نستهلك ساعات الاستضافة خارج نافذة العمل).
+          deadline=$(( $(date +%s) + (BUDGET + 2) * 60 ))
+          tick=0
+          while [ "$(date +%s)" -lt "$deadline" ]; do
+            sleep 240
+            tick=$((tick + 1))
+            for url in "${URL_LIST[@]}"; do
+              curl -s -o /dev/null --max-time 60 "$url/health" || true
+            done
+            echo "   ⏱️  إبقاء صاحية — نبضة $tick ($(( (deadline - $(date +%s)) / 60 )) دقيقة متبقية)"
+          done
+          echo "🏁 انتهت نافذة الزحف — الخدمة تعود للنوم الآن"
 
           # الزحف يكمل بالخلفية على الخدمة نفسها؛ هنا نتحقق فقط من نجاح الإطلاق.
           if [ "$fail" = "1" ]; then
