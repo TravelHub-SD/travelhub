@@ -80,11 +80,22 @@ export async function saveAvailability(origin, destination, carrier, days) {
 // كل أيام الإتاحة القادمة (لبناء قائمة الزحف: نبحث الأيام التي بها رحلات فقط)
 // الحد واسع عمداً: صف لكل (مسار + يوم + خط)، فأفق ٦٠ يوماً لكل المسارات
 // يتجاوز ٥٠٠٠ بسهولة كلما زادت الوجهات — والقصّ هنا يعني مسارات بلا أسعار.
+//
+// نتجاهل الصفوف التي لم يجدّدها مسحٌ حديث: الحفظ upsert لا يحذف، فيوم أخضر
+// لرحلة أُلغيت يبقى في الجدول إلى الأبد. بلا هذا الشرط يظل زحف الأسعار يبحث
+// تواريخ فارغة ويستهلك الميزانية على رحلات لم تعد موجودة.
+//
+// النافذة أوسع من دورة المسح (مرّتان أسبوعياً) بهامش واسع: لو تعثّر المسح
+// مرّة أو مرّتين لا نريد أن تختفي الأيام الخضراء من الموقع فجأة.
+export const AVAIL_MAX_AGE_DAYS = Number(process.env.AVAIL_MAX_AGE_DAYS) || 14
+
 export async function listUpcomingAvailability(fromDate, toDate, limit = 20000) {
   if (!storeEnabled) return []
+  const since = new Date(Date.now() - AVAIL_MAX_AGE_DAYS * 86_400_000).toISOString()
   const q =
     `availability?select=origin,destination,flight_date` +
     `&flight_date=gte.${fromDate}&flight_date=lte.${toDate}` +
+    `&updated_at=gte.${encodeURIComponent(since)}` +
     `&order=flight_date.asc&limit=${limit}`
   return (await rest(q, { method: "GET" })) || []
 }
