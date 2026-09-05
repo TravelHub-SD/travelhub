@@ -37,15 +37,23 @@ export async function storedAirports(): Promise<{ code: string; name: string }[]
 }
 
 // ─── الأيام الخضراء المخزّنة ─────────────────────────────────────────────────
+// نتجاهل ما لم يجدّده مسحٌ حديث: الزحف يحفظ بـ upsert ولا يحذف، فيومٌ أخضر
+// لرحلة أُلغيت يبقى مخزّناً إلى الأبد ويظهر للزائر كأنها ما زالت تطير.
+// النافذة أوسع من دورة المسح (مرّتان أسبوعياً) حتى لا تختفي الأيام الخضراء
+// من الموقع لمجرّد تعثّر مسحٍ واحد.
+const AVAIL_MAX_AGE_DAYS = Number(process.env.AVAIL_MAX_AGE_DAYS) || 14
+
 export async function storedAvailability(
   origin: string,
   destination: string,
   start: string,
   end: string,
 ): Promise<Record<string, number> | null> {
+  const since = new Date(Date.now() - AVAIL_MAX_AGE_DAYS * 86_400_000).toISOString()
   const rows = await rest<{ flight_date: string; seats: number }[]>(
     `availability?select=flight_date,seats&origin=eq.${origin}&destination=eq.${destination}` +
-      `&flight_date=gte.${start}&flight_date=lte.${end}&limit=400`,
+      `&flight_date=gte.${start}&flight_date=lte.${end}` +
+      `&updated_at=gte.${encodeURIComponent(since)}&limit=400`,
   )
   if (!rows?.length) return null
   const days: Record<string, number> = {}
