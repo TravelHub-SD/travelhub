@@ -144,10 +144,17 @@ export async function crawlPrices({ budgetMs = 5 * 60 * 60_000, horizonDays = 60
     const rows = await listUpcomingAvailability(from, to)
     if (!rows.length) return { ok: false, reason: "جدول الإتاحة فارغ — شغّل زحف الإتاحة أولاً" }
 
+    // خُذ فقط أيام **خطوط هذه النسخة**. جدول الإتاحة مشترك بين الموصّلات
+    // الثلاثة، فبلا هذا الفلتر يأخذ كل موصّل القائمة كاملة ويبحث مسارات
+    // لا يطيرها خطّه أصلاً: قياساً على بيانات اليوم، ٨٥٪ من ميزانية سودانير
+    // (٢١٢٢ بحثاً من ٢٤٩٦) كانت ستذهب إلى نتائج فارغة.
+    const mine = new Set(config.carriers.map((c) => c.name).filter(Boolean))
+    const relevant = rows.filter((r) => !r.carrier || mine.has(r.carrier))
+
     // أزل التكرار (عدة خطوط لنفس اليوم) واجمع أيام كل مسار على حدة
     const seen = new Set()
     const byRoute = new Map()
-    for (const r of rows) {
+    for (const r of relevant) {
       const date = String(r.flight_date).slice(0, 10)
       const key = `${r.origin}-${r.destination}-${date}`
       if (seen.has(key)) continue
