@@ -51,7 +51,7 @@
 | الحقل | القيمة |
 |---|---|
 | Repository | `TravelHub-SD/travelhub` |
-| Branch | `claude/website-display-03zyxc` |
+| Branch | `main` |
 | **Root Directory** | `connector` ← بدونها يفشل البناء |
 | Runtime | Docker |
 | Region | Frankfurt |
@@ -114,6 +114,24 @@ https://tarco-connector.onrender.com,https://badr-connector.onrender.com,https:/
 
 بعد نجاح الثلاث، احذف الخدمة المدمجة (`travelhub-connector`) أو أوقفها —
 وإلا ظلّت تستهلك ساعات وتكتب صفوفاً بفضاء اسم مختلف.
+
+## الخطوة ٦ — امسح صفوف الخدمة القديمة ← لا تتخطّاها
+
+صفوف الخزينة الحالية مكتوبة بالمصدر `3tair-badr-sudanair`. الخدمات الجديدة
+تكتب بمصادر `3tair` و`badr` و`sudanair`، فيصير للمسار الواحد **أربعة** صفوف:
+ثلاثة تتجدّد وواحد يتيم لا يحدّثه شيء.
+
+والقارئ يشترط أن تكون كل الصفوف طازجة (حتى لا يُخفي خطاً)، فالصف اليتيم
+بعد ٢٤ ساعة يدفع **كل** بحث إلى المتصفح — لأسبوع كامل، حتى يُعدّ مهجوراً.
+
+فور نجاح الموصّلات الثلاثة، في Supabase → SQL Editor:
+
+```sql
+delete from flight_cache where source = '3tair-badr-sudanair';
+delete from crawl_state  where id     = 'avail:3tair-badr-sudanair';
+```
+
+الصفوف تُعاد كتابتها من أول زحف — والبحث الحيّ يملؤها أثناء ذلك.
 
 ---
 
