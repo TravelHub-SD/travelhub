@@ -27,6 +27,14 @@ on:
         default: prices
         type: choice
         options: [prices, availability]
+      minutes:
+        # نافذة قصيرة تنفع للتشغيل نهاراً: الترتيب الدائري يعطي أقرب يوم من
+        # كل مسار أولاً، فحتى ٤٥ دقيقة تُوسّع عدد المسارات المسعّرة فوراً.
+        # اتركه فارغاً للنافذة الكاملة (٣٠٠ للأسعار، ٥٠ للإتاحة).
+        description: "ميزانية الوقت بالدقائق (فارغ = الكاملة)"
+        required: false
+        default: ""
+        type: string
 
 jobs:
   refresh:
@@ -52,15 +60,25 @@ jobs:
           KEY: ${{ secrets.CONNECTOR_API_KEY }}
           URLS: ${{ secrets.CONNECTOR_URLS }}
           PHASE: ${{ steps.phase.outputs.value }}
+          MINUTES: ${{ inputs.minutes }}
         run: |
           set -u
           if [ -z "${URLS:-}" ]; then echo "::error::CONNECTOR_URLS غير مضبوط"; exit 1; fi
 
+          # ميزانية يدوية اختيارية (أرقام فقط، وبحد أقصى ٣٠٠ حتى لا تتجاوز
+          # الوظيفة سقف GitHub البالغ ٣٦٠ دقيقة)
+          OVERRIDE=""
+          case "${MINUTES:-}" in
+            ""|*[!0-9]*) ;;
+            *) OVERRIDE=$(( MINUTES > 300 ? 300 : (MINUTES < 1 ? 1 : MINUTES) )) ;;
+          esac
+
           if [ "$PHASE" = "availability" ]; then
-            BUDGET=50; PATH_Q="crawl/availability?minutes=${BUDGET}&months=3"
+            BUDGET=${OVERRIDE:-50}; PATH_Q="crawl/availability?minutes=${BUDGET}&months=3"
           else
-            BUDGET=300; PATH_Q="crawl/prices?minutes=${BUDGET}&days=60"
+            BUDGET=${OVERRIDE:-300}; PATH_Q="crawl/prices?minutes=${BUDGET}&days=60"
           fi
+          echo "المرحلة: $PHASE — الميزانية: ${BUDGET} دقيقة"
 
           IFS=',' read -ra LIST <<< "$URLS"
           URL_LIST=()
