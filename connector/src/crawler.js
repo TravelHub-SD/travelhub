@@ -112,7 +112,9 @@ export async function crawlAvailability({ budgetMs = 60 * 60_000, months = 3 } =
 }
 
 // ── ② الأسعار: نبحث فقط الأيام التي بها رحلات فعلاً ─────────────
-export async function crawlPrices({ budgetMs = 3 * 60 * 60_000, horizonDays = 30, freshHours = 20 } = {}) {
+// freshHours: نتخطّى ما حُدِّث خلال هذه المدة. تُبقى أقصر من الدورة اليومية
+// حتى يُعاد تحديث كل صف كل ليلة بدل أن يُتخطّى ويشيخ يومين.
+export async function crawlPrices({ budgetMs = 3 * 60 * 60_000, horizonDays = 30, freshHours = 12 } = {}) {
   if (!storeEnabled) return { ok: false, reason: "supabase غير مضبوط" }
   if (running) return { ok: false, reason: "زحف آخر يعمل" }
   if (config.mock || !config.carriers.length) return { ok: false, reason: "لا خطوط حقيقية" }
