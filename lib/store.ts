@@ -58,12 +58,18 @@ export async function storedAvailability(
 
 // ─── نتائج البحث المخزّنة ────────────────────────────────────────────────────
 // تُدمج أسطر كل الموصّلات (سطر لكل مجموعة خطوط) وتُرتّب بالسعر.
+//
+// نافذة الصلاحية يجب أن تكون أوسع من دورة التحديث، وإلا صارت الخزينة بلا فائدة:
+// الزحف يعمل ليلياً ويستغرق ~٣ ساعات ليمرّ على المسارات، فيبلغ عمر الصف ٣٠-٣٥
+// ساعة قبل أن يأتي دوره ثانيةً. نافذة ٢٤ ساعة كانت ترفض كل شيء عملياً فيذهب كل
+// بحث إلى المتصفح. ٧٢ ساعة تُبقي البيانات مستعملة، ونُرجع updatedAt مع النتيجة
+// ليعرف العميل عمرها ويتحقّق من السعر حيّاً قبل الحجز.
 export async function storedFlights(
   origin: string,
   destination: string,
   departDate: string,
   paxKey: string,
-  maxAgeHours = 24,
+  maxAgeHours = 72,
 ): Promise<{ flights: any[]; updatedAt: string } | null> {
   const rows = await rest<{ payload: any[]; updated_at: string }[]>(
     `flight_cache?select=payload,updated_at&origin=eq.${origin}&destination=eq.${destination}` +
