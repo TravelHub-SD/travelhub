@@ -210,15 +210,28 @@ export async function searchFlights(params: SearchParams): Promise<FlightSearchR
     }
   }
 
-  // ① الخزينة أولاً (ذهاب فقط) — رد فوري من نتائج الزحف الليلي بلا تشغيل متصفح.
-  // نعرض عمر البيانات ليتحقّق العميل من السعر حيّاً قبل الحجز.
+  // ① الخزينة أولاً — رد فوري من نتائج الزحف الليلي بلا تشغيل متصفح.
+  // نُرجع updatedAt ليتحقّق العميل من السعر حيّاً قبل الحجز.
+  const paxKey = `${adults}-${children}-${infants}`
   if (!returnDate) {
-    const hit = await storedFlights(origin, destination, departureDate, `${adults}-${children}-${infants}`)
+    const hit = await storedFlights(origin, destination, departureDate, paxKey)
     if (hit) {
-      return {
-        data: hit.flights,
-        meta: { source: "store", currency: "SDG", updatedAt: hit.updatedAt },
-      }
+      return { data: hit.flights, meta: { source: "store", currency: "SDG", updatedAt: hit.updatedAt } }
+    }
+  } else {
+    // ذهاب وعودة: النظام يسعّر كل اتجاه مستقلاً، فنركّبها من صفَّي ذهاب
+    // مخزّنين (رايح + جاي) بدل تشغيل بحث حيّ — بلا أي زحف إضافي.
+    const [out, back] = await Promise.all([
+      storedFlights(origin, destination, departureDate, paxKey),
+      storedFlights(destination, origin, returnDate, paxKey),
+    ])
+    if (out && back) {
+      const data = [
+        ...out.flights.map((f) => ({ ...f, leg: "ذهاب" }) as Flight),
+        ...back.flights.map((f) => ({ ...f, leg: "عودة" }) as Flight),
+      ]
+      const updatedAt = out.updatedAt < back.updatedAt ? out.updatedAt : back.updatedAt
+      return { data, meta: { source: "store", currency: "SDG", updatedAt } }
     }
   }
 
