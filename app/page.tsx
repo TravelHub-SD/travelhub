@@ -158,7 +158,9 @@ function Logo() {
 
 export default function Home() {
   const [activeTab, setActiveTab] = useState<"flights" | "hotels" | "activities">("flights")
-  const [tripType, setTripType] = useState<"one-way" | "round-trip" | "multi-city">("round-trip")
+  // معظم حجوزات السوق السوداني ذهاب فقط، فهذا هو الوضع الافتراضي —
+  // يوفّر على الزائر خطوة، ويقرأ من الخزينة مباشرة بلا انتظار تاريخ عودة.
+  const [tripType, setTripType] = useState<"one-way" | "round-trip" | "multi-city">("one-way")
   const [language, setLanguage] = useState<"ar" | "en">("ar")
   const [isLoading, setIsLoading] = useState(false)
   const [searchResults, setSearchResults] = useState<any>(null)

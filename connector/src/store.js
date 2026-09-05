@@ -78,7 +78,9 @@ export async function saveAvailability(origin, destination, carrier, days) {
 }
 
 // كل أيام الإتاحة القادمة (لبناء قائمة الزحف: نبحث الأيام التي بها رحلات فقط)
-export async function listUpcomingAvailability(fromDate, toDate, limit = 5000) {
+// الحد واسع عمداً: صف لكل (مسار + يوم + خط)، فأفق ٦٠ يوماً لكل المسارات
+// يتجاوز ٥٠٠٠ بسهولة كلما زادت الوجهات — والقصّ هنا يعني مسارات بلا أسعار.
+export async function listUpcomingAvailability(fromDate, toDate, limit = 20000) {
   if (!storeEnabled) return []
   const q =
     `availability?select=origin,destination,flight_date` +

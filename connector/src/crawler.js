@@ -114,7 +114,7 @@ export async function crawlAvailability({ budgetMs = 60 * 60_000, months = 3 } =
 // ── ② الأسعار: نبحث فقط الأيام التي بها رحلات فعلاً ─────────────
 // freshHours: نتخطّى ما حُدِّث خلال هذه المدة. تُبقى أقصر من الدورة اليومية
 // حتى يُعاد تحديث كل صف كل ليلة بدل أن يُتخطّى ويشيخ يومين.
-export async function crawlPrices({ budgetMs = 3 * 60 * 60_000, horizonDays = 30, freshHours = 12 } = {}) {
+export async function crawlPrices({ budgetMs = 5 * 60 * 60_000, horizonDays = 60, freshHours = 12 } = {}) {
   if (!storeEnabled) return { ok: false, reason: "supabase غير مضبوط" }
   if (running) return { ok: false, reason: "زحف آخر يعمل" }
   if (config.mock || !config.carriers.length) return { ok: false, reason: "لا خطوط حقيقية" }
@@ -133,20 +133,35 @@ export async function crawlPrices({ budgetMs = 3 * 60 * 60_000, horizonDays = 30
     const rows = await listUpcomingAvailability(from, to)
     if (!rows.length) return { ok: false, reason: "جدول الإتاحة فارغ — شغّل زحف الإتاحة أولاً" }
 
-    // أزل التكرار (عدة خطوط لنفس اليوم) ورتّب: الأهم ثم الأقرب تاريخاً
+    // أزل التكرار (عدة خطوط لنفس اليوم) واجمع أيام كل مسار على حدة
     const seen = new Set()
-    const tasks = []
+    const byRoute = new Map()
     for (const r of rows) {
       const date = String(r.flight_date).slice(0, 10)
       const key = `${r.origin}-${r.destination}-${date}`
       if (seen.has(key)) continue
       seen.add(key)
-      tasks.push({ origin: r.origin, destination: r.destination, date, key })
+      const route = `${r.origin}-${r.destination}`
+      if (!byRoute.has(route)) byRoute.set(route, [])
+      byRoute.get(route).push({ origin: r.origin, destination: r.destination, date, key })
     }
-    tasks.sort((a, b) => {
-      const p = priorityRank(a.origin, a.destination) - priorityRank(b.origin, b.destination)
-      return p !== 0 ? p : a.date.localeCompare(b.date)
-    })
+
+    // ترتيب دائري (اتّساعاً لا عمقاً): نأخذ أقرب يوم من **كل** مسار، ثم اليوم
+    // الذي يليه من كل مسار… وهكذا.
+    //
+    // الترتيب القديم (الأهم ثم الأقرب تاريخاً) كان يستنفد ميزانية الليلة كاملة
+    // على أيام مسار واحد، فتبقى مسارات لها أيام خضراء وبلا أي سعر مخزّن —
+    // ولذلك غطّت الخزينة ١٨ مساراً من ٣٤. بهذا الترتيب يحصل كل مسار له أيام
+    // خضراء على أسعار أقرب أيامه من أول ليلة، ثم يزداد العمق كلما اتّسعت
+    // الميزانية. الأولوية ما زالت محفوظة: ترتيب المسارات داخل كل جولة.
+    const routes = [...byRoute.values()]
+    for (const list of routes) list.sort((a, b) => a.date.localeCompare(b.date))
+    routes.sort(
+      (a, b) => priorityRank(a[0].origin, a[0].destination) - priorityRank(b[0].origin, b[0].destination),
+    )
+    const tasks = []
+    const deepest = routes.reduce((m, l) => Math.max(m, l.length), 0)
+    for (let k = 0; k < deepest; k++) for (const list of routes) if (list[k]) tasks.push(list[k])
 
     // تخطَّ ما هو محدَّث حديثاً (لا نكرّر عمل الليلة السابقة)
     const sinceIso = new Date(Date.now() - freshHours * 3_600_000).toISOString()
@@ -172,7 +187,14 @@ export async function crawlPrices({ budgetMs = 3 * 60 * 60_000, horizonDays = 30
         stored++
       }
     }
-    return { ok: true, candidates: tasks.length, searched, stored, timeLeftMs: Math.max(0, deadline - Date.now()) }
+    return {
+      ok: true,
+      routes: routes.length,
+      candidates: tasks.length,
+      searched,
+      stored,
+      timeLeftMs: Math.max(0, deadline - Date.now()),
+    }
   } catch (e) {
     return { ok: false, reason: e?.message || String(e) }
   } finally {
