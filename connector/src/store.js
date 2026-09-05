@@ -93,7 +93,7 @@ export async function listUpcomingAvailability(fromDate, toDate, limit = 20000) 
   if (!storeEnabled) return []
   const since = new Date(Date.now() - AVAIL_MAX_AGE_DAYS * 86_400_000).toISOString()
   const q =
-    `availability?select=origin,destination,flight_date` +
+    `availability?select=origin,destination,flight_date,carrier` +
     `&flight_date=gte.${fromDate}&flight_date=lte.${toDate}` +
     `&updated_at=gte.${encodeURIComponent(since)}` +
     `&order=flight_date.asc&limit=${limit}`
