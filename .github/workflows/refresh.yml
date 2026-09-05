@@ -28,7 +28,8 @@ jobs:
   refresh:
     runs-on: ubuntu-latest
     # يجب أن يغطّي مدة الزحف كاملة، لأن هذه الوظيفة تُبقي الخدمة صاحية أثناءه.
-    timeout-minutes: 190
+    # نافذة الأسعار ٣٠٠ دقيقة (٠٠:٠٠ ← ٠٥:٠٠ بتوقيت السودان) + هامش.
+    timeout-minutes: 320
     steps:
       - name: تحديد المرحلة
         id: phase
@@ -53,7 +54,7 @@ jobs:
           if [ "$PHASE" = "availability" ]; then
             BUDGET=50; PATH_Q="crawl/availability?minutes=${BUDGET}&months=3"
           else
-            BUDGET=170; PATH_Q="crawl/prices?minutes=${BUDGET}&days=30"
+            BUDGET=300; PATH_Q="crawl/prices?minutes=${BUDGET}&days=60"
           fi
 
           IFS=',' read -ra LIST <<< "$URLS"

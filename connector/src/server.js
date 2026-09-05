@@ -256,8 +256,8 @@ app.post("/crawl/availability", (req, res) => {
 app.post("/crawl/prices", (req, res) => {
   if (!storeEnabled) return res.status(400).json({ ok: false, reason: "supabase غير مضبوط" })
   if (crawlerBusy()) return res.json({ started: false, reason: "زحف آخر يعمل" })
-  const budgetMs = minutes(req.query.minutes, 180)
-  const horizonDays = Math.max(1, Math.min(90, Number(req.query.days) || 30))
+  const budgetMs = minutes(req.query.minutes, 300)
+  const horizonDays = Math.max(1, Math.min(120, Number(req.query.days) || 60))
   res.json({ started: true, phase: "prices", budgetMinutes: budgetMs / 60_000, horizonDays })
   crawlPrices({ budgetMs, horizonDays })
     .then((r) => console.log("[crawl] prices:", JSON.stringify(r)))
