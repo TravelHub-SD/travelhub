@@ -3,7 +3,7 @@
 #
 #  • الأسعار: كل ليلة 00:00 بتوقيت السودان (21:00 UTC) — تبحث الأيام التي بها
 #    رحلات فعلاً (حسب جدول الإتاحة) بميزانية وقت ثابتة وتستأنف من حيث توقّفت.
-#  • الإتاحة (الأيام الخضراء): مرة أسبوعياً — السبت 08:00 بتوقيت السودان.
+#  • الإتاحة (الأيام الخضراء): الأربعاء والسبت 08:00 بتوقيت السودان.
 #
 # الموصّل يقبل زحفاً واحداً في المرة، فالمرحلتان لا يجوز أن تتداخلا. جدولة
 # GitHub تتأخر حتى ساعتين وقت الذروة، فالنافذتان متباعدتان عمداً، ومع ذلك
@@ -18,7 +18,10 @@ name: Refresh flight store
 on:
   schedule:
     - cron: "0 21 * * *"   # يومياً 00:00 بتوقيت السودان (UTC+3) — الأسعار
-    - cron: "0 5 * * 6"    # السبت 08:00 بتوقيت السودان — الإتاحة الأسبوعية
+    # الإتاحة: الأربعاء والسبت 08:00 بتوقيت السودان. مرّتان لا مرّة، لأن
+    # اللفّة الكاملة على أزواج المطارات (٨١٢ زوجاً) لم تكتمل بعد — عند
+    # اكتمالها يكفي يوم واحد للتحديث الدوري.
+    - cron: "0 5 * * 3,6"
   workflow_dispatch:        # تشغيل يدوي من تبويب Actions
     inputs:
       phase:
@@ -49,7 +52,7 @@ jobs:
         run: |
           if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
             echo "value=${{ inputs.phase }}" >> "$GITHUB_OUTPUT"
-          elif [ "${{ github.event.schedule }}" = "0 5 * * 6" ]; then
+          elif [ "${{ github.event.schedule }}" = "0 5 * * 3,6" ]; then
             echo "value=availability" >> "$GITHUB_OUTPUT"
           else
             echo "value=prices" >> "$GITHUB_OUTPUT"
@@ -74,7 +77,7 @@ jobs:
           esac
 
           if [ "$PHASE" = "availability" ]; then
-            BUDGET=${OVERRIDE:-50}; PATH_Q="crawl/availability?minutes=${BUDGET}&months=3"
+            BUDGET=${OVERRIDE:-120}; PATH_Q="crawl/availability?minutes=${BUDGET}&months=3"
           else
             BUDGET=${OVERRIDE:-300}; PATH_Q="crawl/prices?minutes=${BUDGET}&days=60"
           fi
