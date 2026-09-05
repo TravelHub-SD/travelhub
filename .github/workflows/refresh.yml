@@ -41,6 +41,14 @@ on:
         required: false
         default: ""
         type: string
+      only_url:
+        # لاختبار موصّل جديد قبل ضمّه للإنتاج: يتجاهل CONNECTOR_URLS ويزحف
+        # بهذا الرابط وحده. الصفوف تصل Supabase بفضاء اسم الخط، فيُرى فوراً
+        # هل دخول البوابة يعمل — وهو ما لا يكشفه /health.
+        description: "اختبار موصّل واحد فقط (رابطه — فارغ = كل الموصّلات)"
+        required: false
+        default: ""
+        type: string
 
 jobs:
   # ── ① كم موصّلاً عندنا؟ ────────────────────────────────────────────────
@@ -56,8 +64,11 @@ jobs:
         id: build
         env:
           URLS: ${{ secrets.CONNECTOR_URLS }}
+          ONLY_URL: ${{ inputs.only_url }}
         run: |
           set -u
+          # اختبار موصّل واحد: وظيفة واحدة، ولا نلمس CONNECTOR_URLS أصلاً
+          if [ -n "${ONLY_URL:-}" ]; then URLS="$ONLY_URL"; fi
           if [ -z "${URLS:-}" ]; then echo "::error::CONNECTOR_URLS غير مضبوط"; exit 1; fi
 
           if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
@@ -102,8 +113,10 @@ jobs:
           PHASE: ${{ needs.plan.outputs.phase }}
           MINUTES: ${{ inputs.minutes }}
           INDEX: ${{ matrix.index }}
+          ONLY_URL: ${{ inputs.only_url }}
         run: |
           set -u
+          if [ -n "${ONLY_URL:-}" ]; then URLS="$ONLY_URL"; fi
 
           IFS=',' read -ra LIST <<< "$URLS"
           CLEAN=()
