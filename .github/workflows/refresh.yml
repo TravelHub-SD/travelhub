@@ -3,7 +3,11 @@
 #
 #  • الأسعار: كل ليلة 00:00 بتوقيت السودان (21:00 UTC) — تبحث الأيام التي بها
 #    رحلات فعلاً (حسب جدول الإتاحة) بميزانية وقت ثابتة وتستأنف من حيث توقّفت.
-#  • الإتاحة (الأيام الخضراء): مرة أسبوعياً — الجمعة 23:00 بتوقيت السودان.
+#  • الإتاحة (الأيام الخضراء): مرة أسبوعياً — السبت 08:00 بتوقيت السودان.
+#
+# الموصّل يقبل زحفاً واحداً في المرة، فالمرحلتان لا يجوز أن تتداخلا. جدولة
+# GitHub تتأخر حتى ساعتين وقت الذروة، فالنافذتان متباعدتان عمداً، ومع ذلك
+# نتحقّق من "started" ونعيد المحاولة إن وجدنا الموصّل مشغولاً.
 #
 # الأسرار المطلوبة في: Settings → Secrets and variables → Actions
 #   CONNECTOR_API_KEY   مفتاح الموصّل
@@ -14,7 +18,7 @@ name: Refresh flight store
 on:
   schedule:
     - cron: "0 21 * * *"   # يومياً 00:00 بتوقيت السودان (UTC+3) — الأسعار
-    - cron: "0 20 * * 5"   # الجمعة 23:00 بتوقيت السودان — الإتاحة الأسبوعية
+    - cron: "0 5 * * 6"    # السبت 08:00 بتوقيت السودان — الإتاحة الأسبوعية
   workflow_dispatch:        # تشغيل يدوي من تبويب Actions
     inputs:
       phase:
@@ -28,15 +32,16 @@ jobs:
   refresh:
     runs-on: ubuntu-latest
     # يجب أن يغطّي مدة الزحف كاملة، لأن هذه الوظيفة تُبقي الخدمة صاحية أثناءه.
-    # نافذة الأسعار ٣٠٠ دقيقة (٠٠:٠٠ ← ٠٥:٠٠ بتوقيت السودان) + هامش.
-    timeout-minutes: 320
+    # نافذة الأسعار ٣٠٠ دقيقة + إعادة محاولات الإطلاق ٢٥ دقيقة + هامش.
+    # الحد الأقصى لوظيفة GitHub ٣٦٠ دقيقة، فلا نتجاوزه.
+    timeout-minutes: 340
     steps:
       - name: تحديد المرحلة
         id: phase
         run: |
           if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
             echo "value=${{ inputs.phase }}" >> "$GITHUB_OUTPUT"
-          elif [ "${{ github.event.schedule }}" = "0 20 * * 5" ]; then
+          elif [ "${{ github.event.schedule }}" = "0 5 * * 6" ]; then
             echo "value=availability" >> "$GITHUB_OUTPUT"
           else
             echo "value=prices" >> "$GITHUB_OUTPUT"
@@ -69,11 +74,38 @@ jobs:
             # أيقظ الخدمة أولاً (خطة مجانية قد تكون نائمة) ثم أطلق الزحف
             curl -s -o /dev/null --max-time 90 "$url/health" || true
 
-            code=$(curl -s -o /tmp/out.json -w "%{http_code}" --max-time 60 \
-              -X POST -H "x-connector-key: $KEY" "$url/$PATH_Q" || echo 000)
-            echo "   HTTP $code — $(head -c 300 /tmp/out.json 2>/dev/null)"
-            [ "$code" = "200" ] || fail=1
+            # ── تحقّق من الإطلاق فعلاً، لا من HTTP 200 وحده ────────────────
+            # الموصّل يقبل زحفاً واحداً في المرة؛ وهو مشغول يردّ
+            # {"started":false} بـ HTTP 200. كنا نعدّها نجاحاً، فمرّت ليلة
+            # ٤ سبتمبر كاملة (١٧٢ دقيقة) بلا سعر واحد لأن زحف الإتاحة كان
+            # ما زال يعمل لحظة الإطلاق. الآن نعيد المحاولة ثم نفشل بوضوح.
+            started=0
+            for attempt in 1 2 3 4 5 6; do
+              code=$(curl -s -o /tmp/out.json -w "%{http_code}" --max-time 60 \
+                -X POST -H "x-connector-key: $KEY" "$url/$PATH_Q" || echo 000)
+              body="$(head -c 300 /tmp/out.json 2>/dev/null)"
+              echo "   محاولة $attempt — HTTP $code — $body"
+              case "$body" in *'"started":true'*) started=1 ;; esac
+              [ "$started" = "1" ] && break
+              [ "$attempt" = "6" ] && break
+              echo "   ⏳ لم ينطلق (مشغول أو متعذّر) — إعادة المحاولة بعد ٥ دقائق"
+              sleep 300
+            done
+
+            if [ "$started" = "1" ]; then
+              any=1
+            else
+              fail=1
+              echo "::error::تعذّر إطلاق مرحلة $PHASE على $url بعد ٦ محاولات (٢٥ دقيقة)"
+            fi
           done
+
+          # لا فائدة من إبقاء الخدمة صاحية ساعات ولا زحف يعمل — تستهلك
+          # ساعات الاستضافة بلا مقابل. اخرج فوراً بخطأ ظاهر.
+          if [ "${any:-0}" != "1" ]; then
+            echo "::error::لم تنطلق أي عملية زحف — لا يوجد ما نُبقي الخدمة صاحية لأجله"
+            exit 1
+          fi
 
           # ── إبقاء الخدمة صاحية أثناء الزحف فقط ──────────────────────────
           # الخطة المجانية تُنيم الخدمة بعد ١٥ دقيقة بلا طلبات وارِدة، والزحف
