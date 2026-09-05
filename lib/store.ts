@@ -73,18 +73,33 @@ export async function storedFlights(
   departDate: string,
   paxKey: string,
   maxAgeHours = 24,
+  abandonHours = 168,
 ): Promise<{ flights: any[]; updatedAt: string } | null> {
   const rows = await rest<{ payload: any[]; updated_at: string }[]>(
     `flight_cache?select=payload,updated_at&origin=eq.${origin}&destination=eq.${destination}` +
       `&depart_date=eq.${departDate}&pax_key=eq.${encodeURIComponent(paxKey)}&limit=10`,
   )
   if (!rows?.length) return null
-  const cutoff = Date.now() - maxAgeHours * 3_600_000
-  const usable = rows.filter((r) => new Date(r.updated_at).getTime() >= cutoff)
-  if (!usable.length) return null
-  const flights = usable.flatMap((r) => (Array.isArray(r.payload) ? r.payload : []))
+
+  // مع الموصّلات المقسّمة يكتب كل موصّل صفّه (صف لكل خط). لو صفٌّ واحد بائت
+  // فنتيجة الخزينة ناقصة خطاً كاملاً — والزائر لا يرى أنها ناقصة. فإمّا أن
+  // تكون كل الصفوف طازجة أو نذهب للبحث الحيّ (وهو ~٢٠ث الآن، ثمن مقبول).
+  //
+  // وصفٌّ تجاوز أسبوعاً لا يُعدّ بائتاً بل مهجوراً: خطٌّ توقّف عن خدمة هذا
+  // المسار. لو عاملناه كبائت لظلّ يدفع كل بحث إلى المتصفح إلى الأبد، فلا
+  // شيء سيحدّثه — الزحف لا يكتب صفّاً لخطٍّ بلا رحلات. فنُسقطه من الحساب.
+  const now = Date.now()
+  const live = rows.filter((r) => now - new Date(r.updated_at).getTime() < abandonHours * 3_600_000)
+  if (!live.length) return null
+
+  const cutoff = now - maxAgeHours * 3_600_000
+  if (live.some((r) => new Date(r.updated_at).getTime() < cutoff)) return null
+
+  const flights = live.flatMap((r) => (Array.isArray(r.payload) ? r.payload : []))
   if (!flights.length) return null
   flights.sort((a, b) => Number.parseFloat(a?.price?.total ?? "0") - Number.parseFloat(b?.price?.total ?? "0"))
-  const newest = usable.reduce((m, r) => (r.updated_at > m ? r.updated_at : m), usable[0].updated_at)
-  return { flights, updatedAt: newest }
+  // نُرجع عمر **أقدم** صف لا أحدثه: النتيجة مدموجة من صفوف الموصّلات، فصدقها
+  // محكوم بأقلّها طزاجة. المبالغة هنا تعني إخبار الزائر أن السعر أحدث مما هو.
+  const oldest = live.reduce((m, r) => (r.updated_at < m ? r.updated_at : m), live[0].updated_at)
+  return { flights, updatedAt: oldest }
 }
