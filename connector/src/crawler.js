@@ -50,6 +50,7 @@ export async function crawlAvailability({ budgetMs = 60 * 60_000, months = 3 } =
   const deadline = Date.now() + budgetMs
   let done = 0
   let saved = 0
+  let failed = 0
 
   try {
     // مطارات النظام لهذه النسخة (خطوطها فقط)
@@ -91,7 +92,18 @@ export async function crawlAvailability({ budgetMs = 60 * 60_000, months = 3 } =
         if (Date.now() > deadline) break
         const [s, e] = ranges[ri]
         for (const c of config.carriers) {
-          const r = await getCarrierAvailability(c, { origin, destination, start: s, end: e })
+          // نداء واحد يرمي استثناء كان يقتل اللفّة كلها: في مسح ٥ سبتمبر
+          // ماتت لفّة تاركو عند الزوج ٤٥٨ بعد ٥٩ دقيقة من ميزانية ١٢٠،
+          // والوظيفة رأت busy=false فحسبتها انتهت طبيعياً. الخطأ العابر
+          // يخصّ زوجاً واحداً، فلا يجوز أن يُنهي المسح.
+          let r
+          try {
+            r = await getCarrierAvailability(c, { origin, destination, start: s, end: e })
+          } catch (e) {
+            failed++
+            console.error(`[crawl] ${origin}-${destination} ${c.name}: ${e?.message || e}`)
+            continue
+          }
           if (r.days?.length) {
             await saveAvailability(origin, destination, c.name, r.days).catch(() => {})
             saved += r.days.length
@@ -114,7 +126,7 @@ export async function crawlAvailability({ budgetMs = 60 * 60_000, months = 3 } =
     }
     // لفّة كاملة → نبدأ من الأول في المرة القادمة
     await setCrawlState(stateId, { i: i >= pairs.length ? 0 : i }).catch(() => {})
-    return { ok: true, pairs: pairs.length, processed: done, daysSaved: saved, finished: i >= pairs.length }
+    return { ok: true, pairs: pairs.length, processed: done, daysSaved: saved, failed, finished: i >= pairs.length }
   } catch (e) {
     return { ok: false, reason: e?.message || String(e) }
   } finally {
@@ -134,6 +146,7 @@ export async function crawlPrices({ budgetMs = 5 * 60 * 60_000, horizonDays = 60
   const source = config.cacheNamespace
   let searched = 0
   let stored = 0
+  let failed = 0
 
   try {
     const today = new Date()
@@ -189,8 +202,12 @@ export async function crawlPrices({ budgetMs = 5 * 60 * 60_000, horizonDays = 60
       if (Date.now() > deadline) break
       if (fresh.has(t.key)) continue
       const params = { origin: t.origin, destination: t.destination, departureDate: t.date, adults: 1, children: 0, infants: 0 }
-      const results = await Promise.all(config.carriers.map((c) => searchCarrier(c, params)))
-      const flights = results.flatMap((r) => r.flights)
+      // allSettled لا Promise.all: بحثٌ واحد يفشل كان يُسقط الليلة كلها.
+      // مع ميزانية ٥ ساعات، خطأ عابر في الدقيقة العشرين يعني فقدان الزحف
+      // بأكمله — ونحن لا نملك أن نخسر ليلة على خطأ يخصّ تاريخاً واحداً.
+      const settled = await Promise.allSettled(config.carriers.map((c) => searchCarrier(c, params)))
+      const flights = settled.flatMap((r) => (r.status === "fulfilled" ? r.value.flights : []))
+      if (settled.some((r) => r.status === "rejected")) failed++
       searched++
       if (flights.length) {
         flights.sort((a, b) => Number(a.price.total) - Number(b.price.total))
@@ -211,6 +228,7 @@ export async function crawlPrices({ budgetMs = 5 * 60 * 60_000, horizonDays = 60
       candidates: tasks.length,
       searched,
       stored,
+      failed,
       timeLeftMs: Math.max(0, deadline - Date.now()),
     }
   } catch (e) {
