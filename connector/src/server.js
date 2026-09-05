@@ -242,6 +242,13 @@ app.post("/warm", (_req, res) => {
 // نردّ فوراً ونُكمل بالخلفية: المُجدوِل لا ينتظر ساعات، والعمل محكوم بميزانية وقت.
 const minutes = (v, def) => Math.max(1, Math.min(600, Number(v) || def)) * 60_000
 
+// هل ما زال زحف يعمل؟ المُجدوِل يسأل ليتوقّف عن الإيقاظ فور انتهاء العمل
+// بدل أن يُبقي الخدمة صاحية طوال الميزانية — وهذا وحده الفرق بين استهلاك
+// ~١٥٠ ساعة استضافة شهرياً و~٢٥ ساعة.
+app.get("/crawl/status", (_req, res) => {
+  res.json({ busy: crawlerBusy() })
+})
+
 app.post("/crawl/availability", (req, res) => {
   if (!storeEnabled) return res.status(400).json({ ok: false, reason: "supabase غير مضبوط" })
   if (crawlerBusy()) return res.json({ started: false, reason: "زحف آخر يعمل" })

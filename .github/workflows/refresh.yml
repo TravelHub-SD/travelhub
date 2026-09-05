@@ -5,12 +5,15 @@
 #    رحلات فعلاً (حسب جدول الإتاحة) بميزانية وقت ثابتة وتستأنف من حيث توقّفت.
 #  • الإتاحة (الأيام الخضراء): الأربعاء والسبت 08:00 بتوقيت السودان.
 #
-# الموصّل يقبل زحفاً واحداً في المرة، فالمرحلتان لا يجوز أن تتداخلا. جدولة
-# GitHub تتأخر حتى ساعتين وقت الذروة، فالنافذتان متباعدتان عمداً، ومع ذلك
-# نتحقّق من "started" ونعيد المحاولة إن وجدنا الموصّل مشغولاً.
+# وظيفة مستقلّة لكل موصّل، تعمل كلها بالتوازي: موصّل تاركو يزحف مسارات تاركو،
+# وبدر مساراته، وسودانير مساراته — بلا طابور ولا تزاحم على متصفح واحد.
+#
+# ولا تُبقي أيّ وظيفة خدمتَها صاحية لحظةً واحدة بعد انتهاء زحفها: تسأل
+# /crawl/status وتخرج فور ما يردّ busy=false. هذا وحده الفرق بين استهلاك
+# ~١٥٠ ساعة استضافة شهرياً و~٢٥ ساعة من أصل ٧٥٠ المجانية.
 #
 # الأسرار المطلوبة في: Settings → Secrets and variables → Actions
-#   CONNECTOR_API_KEY   مفتاح الموصّل
+#   CONNECTOR_API_KEY   مفتاح الموصّل (نفسه على الموصّلات الثلاثة)
 #   CONNECTOR_URLS      روابط الموصّلات مفصولة بفاصلة
 # ─────────────────────────────────────────────────────────────
 name: Refresh flight store
@@ -33,40 +36,82 @@ on:
       minutes:
         # نافذة قصيرة تنفع للتشغيل نهاراً: الترتيب الدائري يعطي أقرب يوم من
         # كل مسار أولاً، فحتى ٤٥ دقيقة تُوسّع عدد المسارات المسعّرة فوراً.
-        # اتركه فارغاً للنافذة الكاملة (٣٠٠ للأسعار، ٥٠ للإتاحة).
+        # اتركه فارغاً للنافذة الكاملة (٣٠٠ للأسعار، ١٢٠ للإتاحة).
         description: "ميزانية الوقت بالدقائق (فارغ = الكاملة)"
         required: false
         default: ""
         type: string
 
 jobs:
-  refresh:
+  # ── ① كم موصّلاً عندنا؟ ────────────────────────────────────────────────
+  # نبني مصفوفة من **الفهارس** (0,1,2) لا من الروابط نفسها: قيمة المصفوفة
+  # تظهر في اسم الوظيفة وسجلّاتها، ولا داعي لنشر عناوين الموصّلات علناً.
+  plan:
     runs-on: ubuntu-latest
-    # يجب أن يغطّي مدة الزحف كاملة، لأن هذه الوظيفة تُبقي الخدمة صاحية أثناءه.
+    outputs:
+      indexes: ${{ steps.build.outputs.indexes }}
+      phase: ${{ steps.build.outputs.phase }}
+    steps:
+      - name: تحديد المرحلة وعدد الموصّلات
+        id: build
+        env:
+          URLS: ${{ secrets.CONNECTOR_URLS }}
+        run: |
+          set -u
+          if [ -z "${URLS:-}" ]; then echo "::error::CONNECTOR_URLS غير مضبوط"; exit 1; fi
+
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            phase="${{ inputs.phase }}"
+          elif [ "${{ github.event.schedule }}" = "0 5 * * 3,6" ]; then
+            phase="availability"
+          else
+            phase="prices"
+          fi
+          echo "phase=$phase" >> "$GITHUB_OUTPUT"
+
+          IFS=',' read -ra LIST <<< "$URLS"
+          n=0
+          for raw in "${LIST[@]}"; do
+            [ -z "$(echo "$raw" | xargs)" ] && continue
+            n=$((n + 1))
+          done
+          if [ "$n" = "0" ]; then echo "::error::CONNECTOR_URLS فارغ"; exit 1; fi
+
+          idx="[0"; i=1
+          while [ "$i" -lt "$n" ]; do idx="$idx,$i"; i=$((i + 1)); done
+          idx="$idx]"
+          echo "indexes=$idx" >> "$GITHUB_OUTPUT"
+          echo "المرحلة: $phase — عدد الموصّلات: $n"
+
+  # ── ② وظيفة لكل موصّل، كلها بالتوازي ──────────────────────────────────
+  refresh:
+    needs: plan
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false        # تعثّر موصّل لا يُلغي زحف الآخرين
+      matrix:
+        index: ${{ fromJSON(needs.plan.outputs.indexes) }}
     # نافذة الأسعار ٣٠٠ دقيقة + إعادة محاولات الإطلاق ٢٥ دقيقة + هامش.
     # الحد الأقصى لوظيفة GitHub ٣٦٠ دقيقة، فلا نتجاوزه.
     timeout-minutes: 340
     steps:
-      - name: تحديد المرحلة
-        id: phase
-        run: |
-          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
-            echo "value=${{ inputs.phase }}" >> "$GITHUB_OUTPUT"
-          elif [ "${{ github.event.schedule }}" = "0 5 * * 3,6" ]; then
-            echo "value=availability" >> "$GITHUB_OUTPUT"
-          else
-            echo "value=prices" >> "$GITHUB_OUTPUT"
-          fi
-
-      - name: إطلاق الزحف على كل الموصّلات
+      - name: زحف الموصّل رقم ${{ matrix.index }}
         env:
           KEY: ${{ secrets.CONNECTOR_API_KEY }}
           URLS: ${{ secrets.CONNECTOR_URLS }}
-          PHASE: ${{ steps.phase.outputs.value }}
+          PHASE: ${{ needs.plan.outputs.phase }}
           MINUTES: ${{ inputs.minutes }}
+          INDEX: ${{ matrix.index }}
         run: |
           set -u
-          if [ -z "${URLS:-}" ]; then echo "::error::CONNECTOR_URLS غير مضبوط"; exit 1; fi
+
+          IFS=',' read -ra LIST <<< "$URLS"
+          CLEAN=()
+          for raw in "${LIST[@]}"; do
+            u="$(echo "$raw" | xargs)"; u="${u%/}"
+            [ -n "$u" ] && CLEAN+=("$u")
+          done
+          url="${CLEAN[$INDEX]}"
 
           # ميزانية يدوية اختيارية (أرقام فقط، وبحد أقصى ٣٠٠ حتى لا تتجاوز
           # الوظيفة سقف GitHub البالغ ٣٦٠ دقيقة)
@@ -81,72 +126,62 @@ jobs:
           else
             BUDGET=${OVERRIDE:-300}; PATH_Q="crawl/prices?minutes=${BUDGET}&days=60"
           fi
-          echo "المرحلة: $PHASE — الميزانية: ${BUDGET} دقيقة"
+          echo "الموصّل #$INDEX — المرحلة: $PHASE — سقف الميزانية: ${BUDGET} دقيقة"
 
-          IFS=',' read -ra LIST <<< "$URLS"
-          URL_LIST=()
-          fail=0
-          for raw in "${LIST[@]}"; do
-            url="$(echo "$raw" | xargs)"; url="${url%/}"
-            [ -z "$url" ] && continue
-            URL_LIST+=("$url")
-            echo "── $url ($PHASE)"
+          # أيقظ الخدمة أولاً (خطة مجانية قد تكون نائمة) ثم أطلق الزحف
+          curl -s -o /dev/null --max-time 90 "$url/health" || true
 
-            # أيقظ الخدمة أولاً (خطة مجانية قد تكون نائمة) ثم أطلق الزحف
-            curl -s -o /dev/null --max-time 90 "$url/health" || true
-
-            # ── تحقّق من الإطلاق فعلاً، لا من HTTP 200 وحده ────────────────
-            # الموصّل يقبل زحفاً واحداً في المرة؛ وهو مشغول يردّ
-            # {"started":false} بـ HTTP 200. كنا نعدّها نجاحاً، فمرّت ليلة
-            # ٤ سبتمبر كاملة (١٧٢ دقيقة) بلا سعر واحد لأن زحف الإتاحة كان
-            # ما زال يعمل لحظة الإطلاق. الآن نعيد المحاولة ثم نفشل بوضوح.
-            started=0
-            for attempt in 1 2 3 4 5 6; do
-              code=$(curl -s -o /tmp/out.json -w "%{http_code}" --max-time 60 \
-                -X POST -H "x-connector-key: $KEY" "$url/$PATH_Q" || echo 000)
-              body="$(head -c 300 /tmp/out.json 2>/dev/null)"
-              echo "   محاولة $attempt — HTTP $code — $body"
-              case "$body" in *'"started":true'*) started=1 ;; esac
-              [ "$started" = "1" ] && break
-              [ "$attempt" = "6" ] && break
-              echo "   ⏳ لم ينطلق (مشغول أو متعذّر) — إعادة المحاولة بعد ٥ دقائق"
-              sleep 300
-            done
-
-            if [ "$started" = "1" ]; then
-              any=1
-            else
-              fail=1
-              echo "::error::تعذّر إطلاق مرحلة $PHASE على $url بعد ٦ محاولات (٢٥ دقيقة)"
-            fi
+          # ── تحقّق من الإطلاق فعلاً، لا من HTTP 200 وحده ────────────────
+          # الموصّل يقبل زحفاً واحداً في المرة؛ وهو مشغول يردّ
+          # {"started":false} بـ HTTP 200. كنا نعدّها نجاحاً، فمرّت ليلة
+          # ٤ سبتمبر كاملة (١٧٢ دقيقة) بلا سعر واحد لأن زحف الإتاحة كان
+          # ما زال يعمل لحظة الإطلاق. الآن نعيد المحاولة ثم نفشل بوضوح.
+          started=0
+          for attempt in 1 2 3 4 5 6; do
+            code=$(curl -s -o /tmp/out.json -w "%{http_code}" --max-time 60 \
+              -X POST -H "x-connector-key: $KEY" "$url/$PATH_Q" || echo 000)
+            body="$(head -c 300 /tmp/out.json 2>/dev/null)"
+            echo "   محاولة $attempt — HTTP $code — $body"
+            case "$body" in *'"started":true'*) started=1 ;; esac
+            [ "$started" = "1" ] && break
+            [ "$attempt" = "6" ] && break
+            echo "   ⏳ لم ينطلق (مشغول أو متعذّر) — إعادة المحاولة بعد ٥ دقائق"
+            sleep 300
           done
 
-          # لا فائدة من إبقاء الخدمة صاحية ساعات ولا زحف يعمل — تستهلك
-          # ساعات الاستضافة بلا مقابل. اخرج فوراً بخطأ ظاهر.
-          if [ "${any:-0}" != "1" ]; then
-            echo "::error::لم تنطلق أي عملية زحف — لا يوجد ما نُبقي الخدمة صاحية لأجله"
+          if [ "$started" != "1" ]; then
+            echo "::error::تعذّر إطلاق مرحلة $PHASE على الموصّل #$INDEX بعد ٦ محاولات"
             exit 1
           fi
 
           # ── إبقاء الخدمة صاحية أثناء الزحف فقط ──────────────────────────
           # الخطة المجانية تُنيم الخدمة بعد ١٥ دقيقة بلا طلبات وارِدة، والزحف
           # يعمل في الخلفية بلا طلبات — فكان يُقتل في منتصفه. نطرق /health كل
-          # ٤ دقائق طوال مدة الزحف فقط، فتبقى صاحية أثناءه وتنام بعده مباشرة
-          # (فلا نستهلك ساعات الاستضافة خارج نافذة العمل).
+          # ٤ دقائق، ونسأل /crawl/status: أول ما يردّ busy=false نخرج فوراً.
+          # الميزانية سقف لا التزام — الزحف غالباً ينتهي قبلها بكثير، ولا
+          # نُنفق ساعات الاستضافة على انتظار فارغ.
           deadline=$(( $(date +%s) + (BUDGET + 2) * 60 ))
           tick=0
+          idle=0
           while [ "$(date +%s)" -lt "$deadline" ]; do
             sleep 240
             tick=$((tick + 1))
-            for url in "${URL_LIST[@]}"; do
-              curl -s -o /dev/null --max-time 60 "$url/health" || true
-            done
-            echo "   ⏱️  إبقاء صاحية — نبضة $tick ($(( (deadline - $(date +%s)) / 60 )) دقيقة متبقية)"
-          done
-          echo "🏁 انتهت نافذة الزحف — الخدمة تعود للنوم الآن"
+            curl -s -o /dev/null --max-time 60 "$url/health" || true
 
-          # الزحف يكمل بالخلفية على الخدمة نفسها؛ هنا نتحقق فقط من نجاح الإطلاق.
-          if [ "$fail" = "1" ]; then
-            echo "::warning::فشل إطلاق الزحف على موصّل واحد أو أكثر"
-          fi
-          echo "✅ تم إطلاق مرحلة $PHASE"
+            st=$(curl -s --max-time 60 -H "x-connector-key: $KEY" "$url/crawl/status" || echo "")
+            case "$st" in
+              *'"busy":false'*) idle=$((idle + 1)) ;;
+              *)                idle=0 ;;
+            esac
+
+            left=$(( (deadline - $(date +%s)) / 60 ))
+            echo "   ⏱️  نبضة $tick — ${left} دقيقة متبقية — الحالة: ${st:-تعذّر}"
+
+            # نبضتان متتاليتان بلا شغل (~٨ دقائق) = انتهى فعلاً، لا فجوة
+            # عابرة بين مهمّتين ولا ردّ مفقود من خدمة تستيقظ.
+            if [ "$idle" -ge 2 ]; then
+              echo "🏁 انتهى زحف الموصّل #$INDEX بعد ~$((tick * 4)) دقيقة — نتركه ينام الآن"
+              exit 0
+            fi
+          done
+          echo "🏁 انتهت نافذة الميزانية للموصّل #$INDEX — الخدمة تعود للنوم الآن"
