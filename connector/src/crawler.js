@@ -86,15 +86,26 @@ export async function crawlAvailability({ budgetMs = 60 * 60_000, months = 3 } =
     for (; i < pairs.length; i++) {
       if (Date.now() > deadline) break
       const [origin, destination] = pairs[i]
-      for (const [s, e] of ranges) {
+      let alive = false
+      for (let ri = 0; ri < ranges.length; ri++) {
         if (Date.now() > deadline) break
+        const [s, e] = ranges[ri]
         for (const c of config.carriers) {
           const r = await getCarrierAvailability(c, { origin, destination, start: s, end: e })
           if (r.days?.length) {
             await saveAvailability(origin, destination, c.name, r.days).catch(() => {})
             saved += r.days.length
+            alive = true
           }
         }
+        // زوج ميت: لا خط واحد له رحلة في الثلاثين يوماً الأولى، فلا نُنفق
+        // عليه الشريحتين الباقيتين. الأغلبية الساحقة من الأزواج الممكنة
+        // (٢٩ مطاراً = ٨١٢ زوجاً) ميتة أصلاً — مطاراتٌ لا تربطها هذه الخطوط —
+        // وهذا يقصّر اللفّة الكاملة إلى الثلث تقريباً.
+        //
+        // الثمن: مسار موسمي لا يطير خلال ٣٠ يوماً (حج/عمرة مثلاً) يُتخطّى
+        // حتى يقترب موعده — وهو مقبول، لأننا لا نسعّره في هذه النافذة أصلاً.
+        if (ri === 0 && !alive) break
       }
       done++
       // سجّل الموضع أولاً بأول — لو أُوقفت الخدمة فجأة نستأنف من هنا
