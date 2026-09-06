@@ -36,6 +36,27 @@ async function rest(path, init = {}, timeoutMs = 20000) {
   }
 }
 
+// ─── قراءة مُصفّحة ───────────────────────────────────────────
+// PostgREST في Supabase يقصّ أي ردّ عند ١٠٠٠ صف مهما كان limit المطلوب،
+// **بصمت**: لا خطأ ولا إشارة إلى وجود بقيّة. كان أثر ذلك أن الزحف لا يرى
+// إلا أقرب ~١٦ يوماً من جدول الإتاحة (١٠٠٠ صف من ٣٣٩١)، فيبدو وكأنه يتوقّف
+// عند ٢٠ سبتمبر بينما هو في الحقيقة أعمى عمّا بعده.
+//
+// buildPath(offset, limit) يبني المسار لكل صفحة. الترتيب يجب أن يكون
+// حاسماً وإلا تكرّرت صفوف أو سقطت بين الصفحات.
+const PAGE = 1000
+
+async function restPaged(buildPath, maxRows = 60000) {
+  const out = []
+  for (let offset = 0; offset < maxRows; offset += PAGE) {
+    const page = await rest(buildPath(offset, PAGE), { method: "GET" })
+    if (!page?.length) break
+    out.push(...page)
+    if (page.length < PAGE) break
+  }
+  return out
+}
+
 // إدراج/تحديث دفعة (upsert على المفتاح الأساسي)
 async function upsert(table, rows) {
   if (!storeEnabled || !rows.length) return
@@ -89,15 +110,17 @@ export async function saveAvailability(origin, destination, carrier, days) {
 // مرّة أو مرّتين لا نريد أن تختفي الأيام الخضراء من الموقع فجأة.
 export const AVAIL_MAX_AGE_DAYS = Number(process.env.AVAIL_MAX_AGE_DAYS) || 14
 
-export async function listUpcomingAvailability(fromDate, toDate, limit = 20000) {
+export async function listUpcomingAvailability(fromDate, toDate) {
   if (!storeEnabled) return []
   const since = new Date(Date.now() - AVAIL_MAX_AGE_DAYS * 86_400_000).toISOString()
-  const q =
-    `availability?select=origin,destination,flight_date,carrier` +
-    `&flight_date=gte.${fromDate}&flight_date=lte.${toDate}` +
-    `&updated_at=gte.${encodeURIComponent(since)}` +
-    `&order=flight_date.asc&limit=${limit}`
-  return (await rest(q, { method: "GET" })) || []
+  return restPaged(
+    (offset, limit) =>
+      `availability?select=origin,destination,flight_date,carrier` +
+      `&flight_date=gte.${fromDate}&flight_date=lte.${toDate}` +
+      `&updated_at=gte.${encodeURIComponent(since)}` +
+      `&order=flight_date.asc,origin.asc,destination.asc,carrier.asc` +
+      `&offset=${offset}&limit=${limit}`,
+  )
 }
 
 // ─── نتائج البحث المخزّنة ────────────────────────────────────
@@ -117,13 +140,16 @@ export async function saveFlights({ origin, destination, departDate, paxKey, sou
 }
 
 // آخر تحديث لكل (مسار+تاريخ) لهذه النسخة — لتخطّي ما هو حديث أثناء الزحف
-export async function listFreshKeys(source, sinceIso, limit = 5000) {
+export async function listFreshKeys(source, sinceIso) {
   if (!storeEnabled) return new Set()
-  const q =
-    `flight_cache?select=origin,destination,depart_date` +
-    `&source=eq.${encodeURIComponent(source)}&updated_at=gte.${encodeURIComponent(sinceIso)}` +
-    `&limit=${limit}`
-  const rows = (await rest(q, { method: "GET" })) || []
+  // مُصفّحة كذلك: القصّ عند ١٠٠٠ هنا يعني اعتبار صفوف طازجة قديمةً وإعادة
+  // تسعيرها بلا داعٍ — هدرٌ في الميزانية لا خطأ في البيانات.
+  const rows = await restPaged(
+    (offset, limit) =>
+      `flight_cache?select=origin,destination,depart_date` +
+      `&source=eq.${encodeURIComponent(source)}&updated_at=gte.${encodeURIComponent(sinceIso)}` +
+      `&order=depart_date.asc,origin.asc,destination.asc&offset=${offset}&limit=${limit}`,
+  )
   return new Set(rows.map((r) => `${r.origin}-${r.destination}-${String(r.depart_date).slice(0, 10)}`))
 }
 

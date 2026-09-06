@@ -32,6 +32,36 @@ function durIso(fromIso, toIso) {
 
 const sdgTotal = (amount) => String(Math.round(Number(String(amount).replace(/[^\d.]/g, "")) || 0))
 
+// ─── تفكيك السعر: الأساس والضرائب ────────────────────────────────────────────
+// كنّا نقرأ Amount.TotalAmount فقط ونرمي بقيّة الكائن، فيخرج السعر كتلةً واحدة
+// لا تُدقَّق. أسماء الحقول تختلف بين نسخ Zenith، فنجرّب المعروف منها ونُبقي
+// القيمة null عند التعذّر بدل تخمين رقم — سطرٌ بلا أجرة أصدق من سطر بأجرة
+// مخترعة.
+const AMOUNT_BASE_KEYS = ["BaseAmount", "BaseFare", "FareAmount", "TotalFareAmount", "Base", "Fare"]
+const AMOUNT_TAX_KEYS = ["TotalTaxAmount", "TaxAmount", "TotalTaxes", "Taxes", "Tax"]
+
+const numOrNull = (v) => {
+  const n = Number(v)
+  return Number.isFinite(n) ? n : null
+}
+
+function pickAmount(amount, keys) {
+  for (const k of keys) {
+    const v = numOrNull(amount?.[k])
+    if (v !== null) return v
+  }
+  return null
+}
+
+// نطبع مفاتيح Amount مرّة واحدة لكل تشغيل: الموصّلات على استضافات لا نقرأ
+// سجلّاتها بسهولة، وهذا السطر وحده يكشف التسمية الصحيحة إن اختلفت.
+let amountSchemaLogged = false
+function logAmountSchema(amount) {
+  if (amountSchemaLogged || !amount || typeof amount !== "object") return
+  amountSchemaLogged = true
+  console.log("[normalize] مفاتيح Amount:", JSON.stringify(Object.keys(amount)))
+}
+
 // ─── المسار التجريبي (mock): صف بأوقات نصية ─────────────────────────────
 function toIsoFromTime(dateStr, timeStr, addDay = 0) {
   const [h = "0", m = "0"] = String(timeStr || "").split(":")
@@ -96,6 +126,10 @@ export function flightsFromServerModel(model, carrier, legInfo) {
       if (!segs.length) continue
 
       let total = 0
+      let fareTotal = 0
+      let taxTotal = 0
+      let fareOk = true
+      let taxOk = true
       let ok = true
       let bagKg = 0
       let refundable = false
@@ -122,6 +156,13 @@ export function flightsFromServerModel(model, carrier, legInfo) {
             continue
           }
           total += cheapest.Amount.TotalAmount
+          logAmountSchema(cheapest.Amount)
+          const base = pickAmount(cheapest.Amount, AMOUNT_BASE_KEYS)
+          const tax = pickAmount(cheapest.Amount, AMOUNT_TAX_KEYS)
+          if (base === null) fareOk = false
+          else fareTotal += base
+          if (tax === null) taxOk = false
+          else taxTotal += tax
           const tKey = pt.Code || pt.PaxType || ["ADT", "CHD", "INF"][ti] || `T${ti}`
           typeTotals.set(tKey, (typeTotals.get(tKey) || 0) + cheapest.Amount.TotalAmount)
           // بيانات العرض (أمتعة/استرجاع/مقاعد/درجة) من فئة البالغين — وهي الأولى غالباً
@@ -171,7 +212,15 @@ export function flightsFromServerModel(model, carrier, legInfo) {
         ...(legInfo?.roundTrip
           ? { leg: first.departure.iataCode === legInfo.origin ? "ذهاب" : "عودة" }
           : {}),
-        price: { total: sdgTotal(total), currency: "SDG" },
+        price: {
+          total: sdgTotal(total),
+          currency: "SDG",
+          // null لا صفر عند التعذّر: الصفر رقمٌ يُصدَّق، والـ null يُسأل عنه.
+          fare: fareOk ? sdgTotal(fareTotal) : null,
+          taxes: taxOk ? sdgTotal(taxTotal) : null,
+        },
+        // كود درجة الحجز كما يعطيه المحرّك (S، Y، L…) قبل ترجمته لاسم مقصورة
+        bookingClass: cabinCode || null,
         // تفصيل السعر لكل فئة (يظهر عند تعدد الفئات: بالغ + طفل ...)
         priceBreakdown:
           typeTotals.size > 1
