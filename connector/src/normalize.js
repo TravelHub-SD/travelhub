@@ -53,14 +53,21 @@ function pickAmount(amount, keys) {
   return null
 }
 
-// نطبع مفاتيح Amount مرّة واحدة لكل تشغيل: الموصّلات على استضافات لا نقرأ
-// سجلّاتها بسهولة، وهذا السطر وحده يكشف التسمية الصحيحة إن اختلفت.
-let amountSchemaLogged = false
-function logAmountSchema(amount) {
-  if (amountSchemaLogged || !amount || typeof amount !== "object") return
-  amountSchemaLogged = true
-  console.log("[normalize] مفاتيح Amount:", JSON.stringify(Object.keys(amount)))
+// عيّنة من أول كائن Amount نراه. الموصّلات على استضافات لا نقرأ سجلّاتها،
+// فنُخرجها مع نتيجة الزحف: التخمين الأول للأسماء أعطى أرقاماً لا تُجمِّع
+// الإجمالي (بدر ٤.٢٩× والسودانية ٢.٧٧–٣.٠٨×)، ولا سبيل لتصحيحها بلا رؤية
+// الحقول الحقيقية. أرقام أجرة واحدة ليست سرّاً.
+let amountSample = null
+function captureAmount(amount) {
+  if (amountSample || !amount || typeof amount !== "object") return
+  const out = {}
+  for (const [k, v] of Object.entries(amount)) {
+    if (typeof v === "number" || typeof v === "string" || typeof v === "boolean") out[k] = v
+  }
+  amountSample = out
 }
+
+export const getAmountSample = () => amountSample
 
 // ─── المسار التجريبي (mock): صف بأوقات نصية ─────────────────────────────
 function toIsoFromTime(dateStr, timeStr, addDay = 0) {
@@ -156,7 +163,7 @@ export function flightsFromServerModel(model, carrier, legInfo) {
             continue
           }
           total += cheapest.Amount.TotalAmount
-          logAmountSchema(cheapest.Amount)
+          captureAmount(cheapest.Amount)
           const base = pickAmount(cheapest.Amount, AMOUNT_BASE_KEYS)
           const tax = pickAmount(cheapest.Amount, AMOUNT_TAX_KEYS)
           if (base === null) fareOk = false
@@ -196,6 +203,9 @@ export function flightsFromServerModel(model, carrier, legInfo) {
       })
 
       if (!ok) continue
+      // تحقّق الجمع بهامش جنيه واحد للتقريب
+      const breakdownValid =
+        fareOk && taxOk && Math.abs(fareTotal + taxTotal - total) <= 1
       const cabin = cabinAr(cabinCode)
       segments.forEach((s) => (s.cabin = cabin))
 
@@ -215,9 +225,13 @@ export function flightsFromServerModel(model, carrier, legInfo) {
         price: {
           total: sdgTotal(total),
           currency: "SDG",
-          // null لا صفر عند التعذّر: الصفر رقمٌ يُصدَّق، والـ null يُسأل عنه.
-          fare: fareOk ? sdgTotal(fareTotal) : null,
-          taxes: taxOk ? sdgTotal(taxTotal) : null,
+          // شرط النشر: أن يُجمِّع التفصيل الإجمالي. أسماء حقول Amount تختلف
+          // بين نسخ Zenith، وأول تخمين أعطى أرقاماً معقولة الشكل وخاطئة
+          // تماماً (بدر ٤.٢٩× الإجمالي). سعرٌ مفصَّل خطأً أسوأ من سعر بلا
+          // تفصيل: الأول يُبنى عليه قرار، والثاني يُسأل عنه.
+          ...(breakdownValid
+            ? { fare: sdgTotal(fareTotal), taxes: sdgTotal(taxTotal) }
+            : { fare: null, taxes: null }),
         },
         // كود درجة الحجز كما يعطيه المحرّك (S، Y، L…) قبل ترجمته لاسم مقصورة
         bookingClass: cabinCode || null,
