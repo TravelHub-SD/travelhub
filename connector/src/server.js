@@ -285,8 +285,12 @@ app.post("/crawl/prices", (req, res) => {
   if (crawlerBusy()) return res.json({ started: false, reason: "زحف آخر يعمل" })
   const budgetMs = minutes(req.query.minutes, 300)
   const horizonDays = Math.max(1, Math.min(120, Number(req.query.days) || 60))
-  res.json({ started: true, phase: "prices", budgetMinutes: budgetMs / 60_000, horizonDays })
-  runCrawl("prices", crawlPrices({ budgetMs, horizonDays }))
+  // fresh=0 يفرض إعادة تسعير كل شيء بدل تخطّي ما حُدِّث حديثاً — يلزم عند
+  // تغيير شكل البيانات المخزّنة (إضافة حقل مثلاً)، وإلا بقيت الصفوف القديمة
+  // على شكلها القديم حتى تشيخ.
+  const freshHours = req.query.fresh === undefined ? 12 : Math.max(0, Number(req.query.fresh) || 0)
+  res.json({ started: true, phase: "prices", budgetMinutes: budgetMs / 60_000, horizonDays, freshHours })
+  runCrawl("prices", crawlPrices({ budgetMs, horizonDays, freshHours }))
 })
 
 // أداة فحص تشخيصية — معطّلة افتراضياً؛ فعّلها مؤقتاً بمتغيّر البيئة INSPECT_ENABLED=1
