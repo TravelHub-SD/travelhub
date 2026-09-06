@@ -49,6 +49,14 @@ on:
         required: false
         default: ""
         type: string
+      refresh_all:
+        # عادةً نتخطّى ما سُعِّر خلال ١٢ ساعة. عند إضافة حقل جديد إلى الصفوف
+        # المخزّنة يجب إعادة تسعير كل شيء، وإلا بقيت الصفوف الحديثة بشكلها
+        # القديم حتى تشيخ — وهي أقرب التواريخ وأكثرها استعمالاً.
+        description: "أعد تسعير كل شيء ولا تتخطَّ الحديث"
+        required: false
+        default: false
+        type: boolean
 
 jobs:
   # ── ① كم موصّلاً عندنا؟ ────────────────────────────────────────────────
@@ -114,6 +122,7 @@ jobs:
           MINUTES: ${{ inputs.minutes }}
           INDEX: ${{ matrix.index }}
           ONLY_URL: ${{ inputs.only_url }}
+          REFRESH_ALL: ${{ inputs.refresh_all }}
         run: |
           set -u
           if [ -n "${ONLY_URL:-}" ]; then URLS="$ONLY_URL"; fi
@@ -138,6 +147,7 @@ jobs:
             BUDGET=${OVERRIDE:-120}; PATH_Q="crawl/availability?minutes=${BUDGET}&months=3"
           else
             BUDGET=${OVERRIDE:-300}; PATH_Q="crawl/prices?minutes=${BUDGET}&days=60"
+            [ "${REFRESH_ALL:-}" = "true" ] && PATH_Q="${PATH_Q}&fresh=0"
           fi
           echo "الموصّل #$INDEX — المرحلة: $PHASE — سقف الميزانية: ${BUDGET} دقيقة"
 
