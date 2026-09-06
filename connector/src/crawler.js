@@ -12,7 +12,6 @@
 // ─────────────────────────────────────────────────────────────
 import { config } from "./config.js"
 import { getCarrierAvailability, searchCarrier, listCarrierAirports } from "./tti.js"
-import { getAmountSample } from "./normalize.js"
 import {
   storeEnabled,
   saveAvailability,
@@ -235,9 +234,6 @@ export async function crawlPrices({ budgetMs = 5 * 60 * 60_000, horizonDays = 60
       searched,
       stored,
       failed,
-      // عيّنة من كائن Amount الخام — تصل عبر /crawl/status إلى سجلّ المُجدوِل،
-      // وهي السبيل الوحيد لمعرفة أسماء حقول الأجرة والضرائب الحقيقية.
-      amountSample: getAmountSample(),
       timeLeftMs: Math.max(0, deadline - Date.now()),
     }
   } catch (e) {
