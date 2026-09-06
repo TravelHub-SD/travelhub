@@ -245,9 +245,31 @@ const minutes = (v, def) => Math.max(1, Math.min(600, Number(v) || def)) * 60_00
 // هل ما زال زحف يعمل؟ المُجدوِل يسأل ليتوقّف عن الإيقاظ فور انتهاء العمل
 // بدل أن يُبقي الخدمة صاحية طوال الميزانية — وهذا وحده الفرق بين استهلاك
 // ~١٥٠ ساعة استضافة شهرياً و~٢٥ ساعة.
+// نتيجة آخر زحف. الموصّلات موزّعة على حسابات استضافة منفصلة لا نملك قراءة
+// سجلّاتها، فبدونها يكون الزحف صندوقاً أسود: ليلة ٥ سبتمبر توقّف الزحف بعد
+// ١١٣ دقيقة من أصل ٣٠٠ وغطّى ١٦ يوماً من ٦٠، ولم نجد ما يفسّر ذلك. نحتفظ
+// بالنتيجة هنا ليقرأها المُجدوِل ويطبعها في سجلّه المتاح لنا.
+let lastCrawl = null
+
 app.get("/crawl/status", (_req, res) => {
-  res.json({ busy: crawlerBusy() })
+  res.json({ busy: crawlerBusy(), last: lastCrawl })
 })
+
+// يُشغّل الزحف بالخلفية ويحتفظ بنتيجته — بما فيها الاستثناء إن وقع، فالانتهاء
+// بخطأ يبدو من الخارج كانتهاء طبيعي تماماً.
+function runCrawl(phase, promise) {
+  const startedAt = new Date().toISOString()
+  promise
+    .then((r) => {
+      lastCrawl = { phase, startedAt, endedAt: new Date().toISOString(), ...r }
+      console.log(`[crawl] ${phase}:`, JSON.stringify(r))
+    })
+    .catch((e) => {
+      const reason = e?.message || String(e)
+      lastCrawl = { phase, startedAt, endedAt: new Date().toISOString(), ok: false, threw: true, reason }
+      console.error(`[crawl] ${phase} failed:`, reason)
+    })
+}
 
 app.post("/crawl/availability", (req, res) => {
   if (!storeEnabled) return res.status(400).json({ ok: false, reason: "supabase غير مضبوط" })
@@ -255,9 +277,7 @@ app.post("/crawl/availability", (req, res) => {
   const budgetMs = minutes(req.query.minutes, 60)
   const months = Math.max(1, Math.min(6, Number(req.query.months) || 2))
   res.json({ started: true, phase: "availability", budgetMinutes: budgetMs / 60_000, months })
-  crawlAvailability({ budgetMs, months })
-    .then((r) => console.log("[crawl] availability:", JSON.stringify(r)))
-    .catch((e) => console.error("[crawl] availability failed:", e?.message || e))
+  runCrawl("availability", crawlAvailability({ budgetMs, months }))
 })
 
 app.post("/crawl/prices", (req, res) => {
@@ -266,9 +286,7 @@ app.post("/crawl/prices", (req, res) => {
   const budgetMs = minutes(req.query.minutes, 300)
   const horizonDays = Math.max(1, Math.min(120, Number(req.query.days) || 60))
   res.json({ started: true, phase: "prices", budgetMinutes: budgetMs / 60_000, horizonDays })
-  crawlPrices({ budgetMs, horizonDays })
-    .then((r) => console.log("[crawl] prices:", JSON.stringify(r)))
-    .catch((e) => console.error("[crawl] prices failed:", e?.message || e))
+  runCrawl("prices", crawlPrices({ budgetMs, horizonDays }))
 })
 
 // أداة فحص تشخيصية — معطّلة افتراضياً؛ فعّلها مؤقتاً بمتغيّر البيئة INSPECT_ENABLED=1

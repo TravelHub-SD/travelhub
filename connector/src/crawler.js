@@ -206,7 +206,12 @@ export async function crawlPrices({ budgetMs = 5 * 60 * 60_000, horizonDays = 60
       // مع ميزانية ٥ ساعات، خطأ عابر في الدقيقة العشرين يعني فقدان الزحف
       // بأكمله — ونحن لا نملك أن نخسر ليلة على خطأ يخصّ تاريخاً واحداً.
       const settled = await Promise.allSettled(config.carriers.map((c) => searchCarrier(c, params)))
-      const flights = settled.flatMap((r) => (r.status === "fulfilled" ? r.value.flights : []))
+      // Array.isArray لا r.value.flights مباشرة: ردٌّ بلا مصفوفة رحلات كان
+      // يمرّر undefined إلى flights ثم يرمي عند الترتيب — خارج أي حارس،
+      // فينتهي الزحف كلّه ويبدو من الخارج كانتهاء طبيعي.
+      const flights = settled.flatMap((r) =>
+        r.status === "fulfilled" && Array.isArray(r.value?.flights) ? r.value.flights : [],
+      )
       if (settled.some((r) => r.status === "rejected")) failed++
       searched++
       if (flights.length) {
