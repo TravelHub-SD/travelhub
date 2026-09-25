@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef, useState } from "react"
 import { useRouter } from "next/navigation"
 import { DIRECT_SOURCES, SERVICE_TYPES, SOURCES, type Agent, type Transaction } from "@/lib/dashboard-store"
 import { todayISO } from "@/lib/dashboard-format"
+import { DateField } from "@/components/dashboard/date-field"
 
 // ارتفاع ٥٦ بكسل لكل حقل: أصغر من ذلك يصعب إصابته بالإبهام على الهاتف.
 const FIELD = "h-14 w-full rounded-xl border border-slate-300 bg-white px-4 text-base outline-none focus:border-[#EF790F] focus:ring-2 focus:ring-[#EF790F]/30"
@@ -158,12 +159,12 @@ export function TransactionForm({
 
   return (
     <form onSubmit={submit} className="space-y-4">
-      <div>
-        <label htmlFor="date" className={LABEL}>
-          التاريخ
-        </label>
-        <input id="date" type="date" required value={v.date} onChange={set("date")} className={FIELD} />
-      </div>
+      <DateField
+        id="date"
+        label="التاريخ"
+        value={v.date}
+        onChange={(d) => setV((s) => ({ ...s, date: d }))}
+      />
 
       <div>
         <label htmlFor="service" className={LABEL}>

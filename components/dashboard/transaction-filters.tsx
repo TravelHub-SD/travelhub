@@ -2,6 +2,7 @@
 
 import { useRouter, useSearchParams } from "next/navigation"
 import { DIRECT_SOURCES, SERVICE_TYPES, SOURCES, type Agent } from "@/lib/dashboard-store"
+import { DateField } from "@/components/dashboard/date-field"
 
 const CTL = "h-11 w-full rounded-xl border border-slate-300 bg-white px-3 text-sm outline-none focus:border-[#EF790F]"
 const LBL = "mb-1 block text-[11px] font-bold text-slate-500"
@@ -24,16 +25,12 @@ export function TransactionFilters({ agents }: { agents: Agent[] }) {
     <div className="rounded-2xl bg-white p-3 shadow-sm">
       <div className="grid grid-cols-2 gap-2">
         <div>
-          <label className={LBL} htmlFor="f-from">
-            من تاريخ
-          </label>
-          <input id="f-from" type="date" value={get("from")} onChange={(e) => apply("from", e.target.value)} className={CTL} />
+          <span className={LBL}>من تاريخ</span>
+          <DateField id="f-from" value={get("from")} onChange={(d) => apply("from", d)} placeholder="الأقدم" compact />
         </div>
         <div>
-          <label className={LBL} htmlFor="f-to">
-            إلى تاريخ
-          </label>
-          <input id="f-to" type="date" value={get("to")} onChange={(e) => apply("to", e.target.value)} className={CTL} />
+          <span className={LBL}>إلى تاريخ</span>
+          <DateField id="f-to" value={get("to")} onChange={(d) => apply("to", d)} placeholder="الأحدث" compact />
         </div>
         <div>
           <label className={LBL} htmlFor="f-service">
