@@ -26,6 +26,10 @@ export const SOURCES = [
   { value: "مباشر", label: "عميل مباشر للوكالة" },
 ] as const
 
+// قنوات اكتساب العميل المباشر — تُقابل قيد transactions_direct_source_valid.
+export const DIRECT_SOURCES = ["معرفة شخصية", "إحالة من عميل", "الموقع", "إعلان", "أخرى"] as const
+
+export type DirectSource = (typeof DIRECT_SOURCES)[number]
 export type ServiceType = (typeof SERVICE_TYPES)[number]
 export type Source = (typeof SOURCES)[number]["value"]
 
@@ -46,6 +50,8 @@ export interface Transaction {
   quantity: number
   agent_profit: number
   net_profit: number
+  // null في الصفوف المسجّلة قبل إضافة العمود — تُعرض تحت "غير محدد".
+  direct_source: DirectSource | null
   note: string | null
   created_at: string
   agents?: { name: string } | null
@@ -59,6 +65,7 @@ export interface TransactionInput {
   quantity: number
   agent_profit: number
   net_profit: number
+  direct_source: string | null
   note: string | null
 }
 
@@ -94,6 +101,9 @@ function pgError(body: string, status: number): string {
   } catch {}
   if (message.includes("transactions_agent_matches_source")) {
     return "المصدر والوكيل غير متطابقين — اختر وكيلاً مع مصدر «وكيل»، ولا تختر وكيلاً مع «عميل مباشر»"
+  }
+  if (message.includes("transactions_direct_source_valid")) {
+    return "قناة الاكتساب مطلوبة مع «عميل مباشر» وممنوعة مع «وكيل»"
   }
   if (message.includes("transactions_service_type_valid")) return "نوع خدمة غير معروف"
   if (message.includes("transactions_source_valid")) return "مصدر غير معروف"
@@ -141,6 +151,7 @@ export interface TransactionFilters {
   to?: string
   service_type?: string
   source?: string
+  direct_source?: string
   agent_id?: number
   limit?: number
 }
@@ -151,6 +162,7 @@ export async function listTransactions(f: TransactionFilters = {}): Promise<Tran
   if (f.to) q.push(`date=lte.${f.to}`)
   if (f.service_type) q.push(`service_type=eq.${encodeURIComponent(f.service_type)}`)
   if (f.source) q.push(`source=eq.${encodeURIComponent(f.source)}`)
+  if (f.direct_source) q.push(`direct_source=eq.${encodeURIComponent(f.direct_source)}`)
   if (f.agent_id) q.push(`agent_id=eq.${f.agent_id}`)
   return rest<Transaction[]>(`transactions?${q.join("&")}`)
 }

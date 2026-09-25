@@ -1,7 +1,7 @@
 "use client"
 
 import { useRouter, useSearchParams } from "next/navigation"
-import { SERVICE_TYPES, SOURCES, type Agent } from "@/lib/dashboard-store"
+import { DIRECT_SOURCES, SERVICE_TYPES, SOURCES, type Agent } from "@/lib/dashboard-store"
 
 const CTL = "h-11 w-full rounded-xl border border-slate-300 bg-white px-3 text-sm outline-none focus:border-[#EF790F]"
 const LBL = "mb-1 block text-[11px] font-bold text-slate-500"
@@ -18,7 +18,7 @@ export function TransactionFilters({ agents }: { agents: Agent[] }) {
     router.push(`/dashboard/transactions?${next.toString()}`)
   }
 
-  const active = ["from", "to", "service_type", "source", "agent_id"].some((k) => get(k))
+  const active = ["from", "to", "service_type", "source", "direct_source", "agent_id"].some((k) => get(k))
 
   return (
     <div className="rounded-2xl bg-white p-3 shadow-sm">
@@ -61,7 +61,25 @@ export function TransactionFilters({ agents }: { agents: Agent[] }) {
             ))}
           </select>
         </div>
-        <div className="col-span-2">
+        <div>
+          <label className={LBL} htmlFor="f-channel">
+            قناة الاكتساب
+          </label>
+          <select
+            id="f-channel"
+            value={get("direct_source")}
+            onChange={(e) => apply("direct_source", e.target.value)}
+            className={CTL}
+          >
+            <option value="">الكل</option>
+            {DIRECT_SOURCES.map((c) => (
+              <option key={c} value={c}>
+                {c}
+              </option>
+            ))}
+          </select>
+        </div>
+        <div>
           <label className={LBL} htmlFor="f-agent">
             الوكيل
           </label>

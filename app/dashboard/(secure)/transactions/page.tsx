@@ -11,6 +11,7 @@ type Params = {
   to?: string
   service_type?: string
   source?: string
+  direct_source?: string
   agent_id?: string
 }
 
@@ -24,6 +25,7 @@ export default async function TransactionsPage({ searchParams }: { searchParams:
       to: p.to || undefined,
       service_type: p.service_type || undefined,
       source: p.source || undefined,
+      direct_source: p.direct_source || undefined,
       agent_id: p.agent_id ? Number(p.agent_id) : undefined,
     })
       .then((rows) => ({ rows, error: "" }))

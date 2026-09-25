@@ -59,6 +59,23 @@ function byService(rows: Transaction[]) {
     .sort((a, b) => b.sum - a.sum)
 }
 
+// العمليات المباشرة وحدها — الوكيل ليس قناة اكتساب. الصفوف الأقدم من
+// العمود قيمتها null فتُجمَّع تحت "غير محدد" بدل أن تختفي.
+function byChannel(rows: Transaction[]) {
+  const map = new Map<string, { sum: number; count: number }>()
+  for (const r of rows) {
+    if (r.source !== "مباشر") continue
+    const key = r.direct_source || "غير محدد"
+    const cur = map.get(key) || { sum: 0, count: 0 }
+    cur.sum += r.net_profit
+    cur.count += 1
+    map.set(key, cur)
+  }
+  return [...map.entries()]
+    .map(([channel, v]) => ({ channel, ...v, avg: Math.round(v.sum / v.count) }))
+    .sort((a, b) => b.sum - a.sum)
+}
+
 function byAgent(rows: Transaction[]) {
   const map = new Map<string, { sum: number; count: number }>()
   for (const r of rows) {
@@ -129,6 +146,7 @@ export default async function DashboardHomePage({
   const sources = bySource(rows)
   const services = byService(rows)
   const agents = byAgent(rows)
+  const channels = byChannel(rows)
   const series = dailySeries(rows, ym)
   const peak = Math.max(1, ...series.map((d) => Math.abs(d.sum)))
 
@@ -208,6 +226,33 @@ export default async function DashboardHomePage({
           </table>
         ) : (
           <p className="py-2 text-sm text-slate-400">لا عمليات في هذا الشهر</p>
+        )}
+      </Panel>
+
+      <Panel title="الربح حسب قناة الاكتساب">
+        {channels.length ? (
+          <table className="w-full">
+            <thead>
+              <tr className="border-b border-slate-100">
+                <th className={TH}>القناة</th>
+                <th className={TH}>العمليات</th>
+                <th className={TH}>صافي الربح</th>
+                <th className={TH}>متوسط العملية</th>
+              </tr>
+            </thead>
+            <tbody>
+              {channels.map((r) => (
+                <tr key={r.channel} className="border-b border-slate-50 last:border-0">
+                  <td className={`${TD} font-semibold`}>{r.channel}</td>
+                  <td className={`${TD} text-slate-500`}>{money(r.count)}</td>
+                  <td className={`${TD} font-bold`}>{money(r.sum)}</td>
+                  <td className={`${TD} text-slate-500`}>{money(r.avg)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        ) : (
+          <p className="py-2 text-sm text-slate-400">لا عمليات مباشرة في هذا الشهر</p>
         )}
       </Panel>
 

@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react"
 import { useRouter } from "next/navigation"
-import { SERVICE_TYPES, SOURCES, type Agent, type Transaction } from "@/lib/dashboard-store"
+import { DIRECT_SOURCES, SERVICE_TYPES, SOURCES, type Agent, type Transaction } from "@/lib/dashboard-store"
 import { todayISO } from "@/lib/dashboard-format"
 
 // ارتفاع ٥٦ بكسل لكل حقل: أصغر من ذلك يصعب إصابته بالإبهام على الهاتف.
@@ -17,6 +17,7 @@ type Values = {
   quantity: string
   agent_profit: string
   net_profit: string
+  direct_source: string
   note: string
 }
 
@@ -29,6 +30,7 @@ function emptyValues(): Values {
     quantity: "1",
     agent_profit: "",
     net_profit: "",
+    direct_source: "",
     note: "",
   }
 }
@@ -42,6 +44,7 @@ function fromTransaction(t: Transaction): Values {
     quantity: String(t.quantity),
     agent_profit: String(t.agent_profit),
     net_profit: String(t.net_profit),
+    direct_source: t.direct_source ?? "",
     note: t.note ?? "",
   }
 }
@@ -67,6 +70,7 @@ export function TransactionForm({
   const firstFieldRef = useRef<HTMLSelectElement>(null)
 
   const withAgent = v.source === "وكيل"
+  const withChannel = v.source === "مباشر"
 
   // في الإضافة نعرض الوكلاء النشطين فقط. في التعديل نُبقي وكيل العملية
   // ولو عُطِّل لاحقاً، وإلا بدا الحقل فارغاً وبدّل الوكيل عند أول حفظ.
@@ -78,12 +82,16 @@ export function TransactionForm({
       : [...active, ...agents.filter((a) => a.id === existing.agent_id)]
   }, [agents, editing, existing])
 
-  // تبديل المصدر إلى «مباشر» يمسح الوكيل وربحه — لا نرسل بقايا اختيار سابق.
+  // تبديل المصدر يمسح حقول الطرف الآخر — لا نرسل بقايا اختيار سابق.
   useEffect(() => {
     if (!withAgent && (v.agent_id || v.agent_profit)) {
       setV((s) => ({ ...s, agent_id: "", agent_profit: "" }))
     }
   }, [withAgent, v.agent_id, v.agent_profit])
+
+  useEffect(() => {
+    if (!withChannel && v.direct_source) setV((s) => ({ ...s, direct_source: "" }))
+  }, [withChannel, v.direct_source])
 
   const set = (k: keyof Values) => (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) =>
     setV((s) => ({ ...s, [k]: e.target.value }))
@@ -102,6 +110,7 @@ export function TransactionForm({
       quantity: Number(v.quantity || 1),
       agent_profit: withAgent ? Number(v.agent_profit || 0) : 0,
       net_profit: v.net_profit === "" ? null : Number(v.net_profit),
+      direct_source: withChannel ? v.direct_source || null : null,
       note: v.note.trim() || null,
     }
 
@@ -126,8 +135,9 @@ export function TransactionForm({
         return
       }
 
-      // نبقى في الصفحة ونُبقي التاريخ والخدمة والمصدر والوكيل: العمليات
-      // المتتالية في اليوم الواحد متشابهة غالباً، فهذا يوفّر أغلب النقرات.
+      // نبقى في الصفحة ونُبقي التاريخ والخدمة والمصدر والوكيل وقناة
+      // الاكتساب: العمليات المتتالية في اليوم الواحد متشابهة غالباً،
+      // فهذا يوفّر أغلب النقرات.
       setV((s) => ({ ...s, quantity: "1", agent_profit: "", net_profit: "", note: "" }))
       setSaved(true)
       firstFieldRef.current?.focus()
@@ -208,6 +218,24 @@ export function TransactionForm({
               لا يوجد وكلاء نشطون — أضف وكيلاً من صفحة الوكلاء أولاً.
             </p>
           )}
+        </div>
+      )}
+
+      {withChannel && (
+        <div>
+          <label htmlFor="channel" className={LABEL}>
+            قناة الاكتساب
+          </label>
+          <select id="channel" required value={v.direct_source} onChange={set("direct_source")} className={FIELD}>
+            <option value="" disabled>
+              اختر…
+            </option>
+            {DIRECT_SOURCES.map((c) => (
+              <option key={c} value={c}>
+                {c}
+              </option>
+            ))}
+          </select>
         </div>
       )}
 

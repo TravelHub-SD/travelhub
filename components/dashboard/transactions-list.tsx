@@ -62,6 +62,7 @@ export function TransactionsList({ rows, agents }: { rows: Transaction[]; agents
               <p className="mt-0.5 text-xs text-slate-500">
                 {longDate(t.date)} · {SOURCE_LABEL[t.source]}
                 {t.agents?.name ? ` · ${t.agents.name}` : ""}
+                {t.source === "مباشر" ? ` · ${t.direct_source || "غير محدد"}` : ""}
                 {t.quantity > 1 ? ` · ${t.quantity} وحدات` : ""}
               </p>
               {t.note && <p className="mt-1 text-xs text-slate-400">{t.note}</p>}

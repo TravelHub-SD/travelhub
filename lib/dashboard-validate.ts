@@ -5,7 +5,7 @@
  * لكن رسالتها هناك تقنية — هنا نعطي المستخدم جملة يفهمها ويصلح بها.
  */
 
-import { SERVICE_TYPES, SOURCES, type TransactionInput } from "@/lib/dashboard-store"
+import { DIRECT_SOURCES, SERVICE_TYPES, SOURCES, type TransactionInput } from "@/lib/dashboard-store"
 
 const SOURCE_VALUES = SOURCES.map((s) => s.value) as readonly string[]
 
@@ -36,18 +36,29 @@ export function validateTransaction(body: any): { ok: true; value: TransactionIn
 
   // الوكيل وربحه يتبعان المصدر: مع «وكيل» كلاهما مطلوب، ومع «مباشر»
   // يُصفَّران حتى لا يتسرّب وكيل قديم من فورم لم يُنظَّف عند التبديل.
+  // وقناة الاكتساب معكوسها: مطلوبة مع «مباشر»، ممنوعة مع «وكيل».
   let agent_id: number | null = null
   let agent_profit = 0
+  let direct_source: string | null = null
   if (source === "وكيل") {
     agent_id = asInt(body?.agent_id)
     if (agent_id === null || agent_id < 1) return { ok: false, error: "اختر الوكيل" }
     const p = asInt(body?.agent_profit ?? 0)
     if (p === null || p < 0) return { ok: false, error: "ربح الوكيل يجب أن يكون رقماً صحيحاً غير سالب" }
     agent_profit = p
+  } else {
+    const ch = String(body?.direct_source || "").trim()
+    if (!(DIRECT_SOURCES as readonly string[]).includes(ch)) {
+      return { ok: false, error: "اختر قناة الاكتساب" }
+    }
+    direct_source = ch
   }
 
   const rawNote = body?.note
   const note = typeof rawNote === "string" && rawNote.trim() ? rawNote.trim().slice(0, 500) : null
 
-  return { ok: true, value: { date, service_type, source, agent_id, quantity, agent_profit, net_profit, note } }
+  return {
+    ok: true,
+    value: { date, service_type, source, agent_id, quantity, agent_profit, net_profit, direct_source, note },
+  }
 }
