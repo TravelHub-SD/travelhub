@@ -78,3 +78,17 @@ create index if not exists transactions_direct_source_idx
 -- من الخادم. مفاتيح المتصفح العامة لا ترى شيئاً.
 alter table agents       enable row level security;
 alter table transactions enable row level security;
+
+-- ── سعر الدولار ──────────────────────────────────────────────
+-- سعرٌ لكل شهر لا إعداداً واحداً: الجنيه يتحرّك كثيراً، وتحويل أرباح
+-- شهرٍ مضى بسعر اليوم يعطي رقماً لا يطابق ما دخل الجيب فعلاً. والشهر
+-- هو وحدة التقرير في اللوحة، فهو الوحدة الطبيعية للسعر.
+--
+-- شهرٌ بلا سعر يقرأ أقرب سعرٍ سابق له (انظر lib/dashboard-store.ts).
+create table if not exists usd_rates (
+  month      text        primary key check (month ~ '^\d{4}-(0[1-9]|1[0-2])$'),
+  rate       bigint      not null check (rate > 0),
+  updated_at timestamptz not null default now()
+);
+
+alter table usd_rates enable row level security;

@@ -102,6 +102,8 @@ function pgError(body: string, status: number): string {
   if (message.includes("transactions_agent_matches_source")) {
     return "المصدر والوكيل غير متطابقين — اختر وكيلاً مع مصدر «وكيل»، ولا تختر وكيلاً مع «عميل مباشر»"
   }
+  if (message.includes("usd_rates_rate_check")) return "سعر الدولار يجب أن يكون رقماً صحيحاً أكبر من صفر"
+  if (message.includes("usd_rates_month_check")) return "صيغة الشهر يجب أن تكون YYYY-MM"
   if (message.includes("transactions_direct_source_valid")) {
     return "قناة الاكتساب مطلوبة مع «عميل مباشر» وممنوعة مع «وكيل»"
   }
@@ -188,4 +190,34 @@ export async function updateTransaction(id: number, input: TransactionInput): Pr
 
 export async function deleteTransaction(id: number): Promise<void> {
   await rest<null>(`transactions?id=eq.${id}`, { method: "DELETE" })
+}
+
+// ─── سعر الدولار ────────────────────────────────────────────────────────────
+
+export interface UsdRate {
+  month: string
+  rate: number
+  updated_at: string
+}
+
+/**
+ * سعر شهرٍ بعينه، وإلا فأقرب سعرٍ سابق له.
+ *
+ * الرجوع للسابق لا للأحدث مطلقاً: لو سجّلت سعر أكتوبر ثم فتحت سبتمبر،
+ * فسعر أكتوبر لا يصف سبتمبر. أمّا سعر أغسطس فأقرب ما يصفه.
+ * `exact` يقول أي الحالتين وقعت، فتعرف الواجهة متى تطلب سعراً.
+ */
+export async function usdRateFor(month: string): Promise<{ rate: number | null; from: string | null; exact: boolean }> {
+  const rows = await rest<UsdRate[]>(`usd_rates?select=*&month=lte.${month}&order=month.desc&limit=1`)
+  if (!rows.length) return { rate: null, from: null, exact: false }
+  return { rate: rows[0].rate, from: rows[0].month, exact: rows[0].month === month }
+}
+
+export async function setUsdRate(month: string, rate: number): Promise<UsdRate> {
+  const rows = await rest<UsdRate[]>("usd_rates", {
+    method: "POST",
+    headers: { Prefer: "return=representation,resolution=merge-duplicates" },
+    body: JSON.stringify({ month, rate, updated_at: new Date().toISOString() }),
+  })
+  return rows[0]
 }

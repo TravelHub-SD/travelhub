@@ -1,8 +1,9 @@
 import Link from "next/link"
 import { Suspense } from "react"
-import { listTransactions, type Transaction } from "@/lib/dashboard-store"
+import { listTransactions, usdRateFor, type Transaction } from "@/lib/dashboard-store"
 import { currentMonth, money, monthLabel, monthRange, todayISO, SOURCE_LABEL } from "@/lib/dashboard-format"
 import { MonthFilter } from "@/components/dashboard/month-filter"
+import { UsdRateBar } from "@/components/dashboard/usd-rate-bar"
 
 export const dynamic = "force-dynamic"
 
@@ -128,9 +129,9 @@ const TD = "px-2 py-2 text-right text-sm tabular-nums"
 export default async function DashboardHomePage({
   searchParams,
 }: {
-  searchParams: Promise<{ month?: string }>
+  searchParams: Promise<{ month?: string; currency?: string }>
 }) {
-  const { month } = await searchParams
+  const { month, currency: currencyParam } = await searchParams
   const ym = /^\d{4}-\d{2}$/.test(month || "") ? month! : currentMonth()
   const { from, to } = monthRange(ym)
 
@@ -141,6 +142,13 @@ export default async function DashboardHomePage({
   } catch (e) {
     error = e instanceof Error ? e.message : String(e)
   }
+
+  const usd = await usdRateFor(ym).catch(() => ({ rate: null, from: null, exact: false }))
+  // الدولار متاح فقط بسعرٍ محفوظ: بلا سعر لا تحويل، لا تخميناً.
+  const currency: "sdg" | "usd" = currencyParam === "usd" && usd.rate ? "usd" : "sdg"
+  const unit = currency === "usd" ? "دولار" : "جنيه"
+  // كل الأرقام تمرّ من هنا، فلا يبقى مبلغٌ بعملة غير المختارة.
+  const amount = (n: number) => (currency === "usd" && usd.rate ? money(Math.round(n / usd.rate)) : money(n))
 
   const s = summarize(rows, ym)
   const sources = bySource(rows)
@@ -159,6 +167,10 @@ export default async function DashboardHomePage({
         </Suspense>
       </div>
 
+      <Suspense fallback={null}>
+        <UsdRateBar month={ym} rate={usd.rate} from={usd.from} exact={usd.exact} currency={currency} />
+      </Suspense>
+
       {error && (
         <p role="alert" className="rounded-xl bg-red-50 px-4 py-3 text-sm font-medium text-red-700">
           {error}
@@ -166,8 +178,8 @@ export default async function DashboardHomePage({
       )}
 
       <div className="grid grid-cols-2 gap-3">
-        <Stat label="إجمالي صافي الربح" value={money(s.total)} hint="جنيه" />
-        <Stat label="المعدل اليومي" value={money(s.perDay)} hint={`على ${s.elapsed} يوم`} />
+        <Stat label="إجمالي صافي الربح" value={amount(s.total)} hint={unit} />
+        <Stat label="المعدل اليومي" value={amount(s.perDay)} hint={`${unit} · على ${s.elapsed} يوم`} />
         <Stat label="عدد العمليات" value={money(s.count)} />
         <Stat label="أيام الصفر" value={money(s.zeroDays)} hint={`من ${s.elapsed} يوم`} />
       </div>
@@ -179,7 +191,7 @@ export default async function DashboardHomePage({
         + تسجيل عملية جديدة
       </Link>
 
-      <Panel title="الربح حسب المصدر">
+      <Panel title={`الربح حسب المصدر (${unit})`}>
         <table className="w-full">
           <thead>
             <tr className="border-b border-slate-100">
@@ -194,7 +206,7 @@ export default async function DashboardHomePage({
               <tr key={r.source} className="border-b border-slate-50 last:border-0">
                 <td className={`${TD} font-semibold`}>{r.source}</td>
                 <td className={`${TD} text-slate-500`}>{money(r.count)}</td>
-                <td className={`${TD} font-bold`}>{money(r.sum)}</td>
+                <td className={`${TD} font-bold`}>{amount(r.sum)}</td>
                 <td className={`${TD} text-slate-500`}>{r.share}%</td>
               </tr>
             ))}
@@ -202,7 +214,7 @@ export default async function DashboardHomePage({
         </table>
       </Panel>
 
-      <Panel title="الربح حسب نوع الخدمة">
+      <Panel title={`الربح حسب نوع الخدمة (${unit})`}>
         {services.length ? (
           <table className="w-full">
             <thead>
@@ -218,8 +230,8 @@ export default async function DashboardHomePage({
                 <tr key={r.service} className="border-b border-slate-50 last:border-0">
                   <td className={`${TD} font-semibold`}>{r.service}</td>
                   <td className={`${TD} text-slate-500`}>{money(r.count)}</td>
-                  <td className={`${TD} font-bold`}>{money(r.sum)}</td>
-                  <td className={`${TD} text-slate-500`}>{money(r.avg)}</td>
+                  <td className={`${TD} font-bold`}>{amount(r.sum)}</td>
+                  <td className={`${TD} text-slate-500`}>{amount(r.avg)}</td>
                 </tr>
               ))}
             </tbody>
@@ -229,7 +241,7 @@ export default async function DashboardHomePage({
         )}
       </Panel>
 
-      <Panel title="الربح حسب قناة الاكتساب">
+      <Panel title={`الربح حسب قناة الاكتساب (${unit})`}>
         {channels.length ? (
           <table className="w-full">
             <thead>
@@ -245,8 +257,8 @@ export default async function DashboardHomePage({
                 <tr key={r.channel} className="border-b border-slate-50 last:border-0">
                   <td className={`${TD} font-semibold`}>{r.channel}</td>
                   <td className={`${TD} text-slate-500`}>{money(r.count)}</td>
-                  <td className={`${TD} font-bold`}>{money(r.sum)}</td>
-                  <td className={`${TD} text-slate-500`}>{money(r.avg)}</td>
+                  <td className={`${TD} font-bold`}>{amount(r.sum)}</td>
+                  <td className={`${TD} text-slate-500`}>{amount(r.avg)}</td>
                 </tr>
               ))}
             </tbody>
@@ -256,7 +268,7 @@ export default async function DashboardHomePage({
         )}
       </Panel>
 
-      <Panel title="ترتيب الوكلاء">
+      <Panel title={`ترتيب الوكلاء (${unit})`}>
         {agents.length ? (
           <table className="w-full">
             <thead>
@@ -273,7 +285,7 @@ export default async function DashboardHomePage({
                     <span className="ms-1 text-xs text-slate-400">{i + 1}.</span> {r.name}
                   </td>
                   <td className={`${TD} text-slate-500`}>{money(r.count)}</td>
-                  <td className={`${TD} font-bold`}>{money(r.sum)}</td>
+                  <td className={`${TD} font-bold`}>{amount(r.sum)}</td>
                 </tr>
               ))}
             </tbody>
@@ -283,14 +295,14 @@ export default async function DashboardHomePage({
         )}
       </Panel>
 
-      <Panel title="صافي الربح اليومي">
+      <Panel title={`صافي الربح اليومي (${unit})`}>
         {/* تمرير أفقي: ٣٠ عموداً لا تتّسع لعرض الهاتف بلا سحق */}
         <div className="overflow-x-auto pb-1">
           <div className="flex h-40 min-w-full items-end gap-1" style={{ minWidth: `${series.length * 18}px` }}>
             {series.map((d) => {
               const h = Math.round((Math.abs(d.sum) / peak) * 100)
               return (
-                <div key={d.day} className="flex flex-1 flex-col items-center gap-1" title={`${d.day}: ${money(d.sum)}`}>
+                <div key={d.day} className="flex flex-1 flex-col items-center gap-1" title={`${d.day}: ${amount(d.sum)} ${unit}`}>
                   <div className="flex h-32 w-full items-end">
                     <div
                       className={`w-full rounded-t ${d.sum < 0 ? "bg-red-400" : d.sum > 0 ? "bg-[#164563]" : "bg-slate-200"}`}
