@@ -52,6 +52,8 @@ export interface Transaction {
   net_profit: number
   // null في الصفوف المسجّلة قبل إضافة العمود — تُعرض تحت "غير محدد".
   direct_source: DirectSource | null
+  // سعر الدولار لحظة العملية. null ⇒ يُستعمل سعر الشهر من usd_rates.
+  usd_rate: number | null
   note: string | null
   created_at: string
   agents?: { name: string } | null
@@ -66,6 +68,7 @@ export interface TransactionInput {
   agent_profit: number
   net_profit: number
   direct_source: string | null
+  usd_rate: number | null
   note: string | null
 }
 
@@ -102,7 +105,9 @@ function pgError(body: string, status: number): string {
   if (message.includes("transactions_agent_matches_source")) {
     return "المصدر والوكيل غير متطابقين — اختر وكيلاً مع مصدر «وكيل»، ولا تختر وكيلاً مع «عميل مباشر»"
   }
-  if (message.includes("usd_rates_rate_check")) return "سعر الدولار يجب أن يكون رقماً صحيحاً أكبر من صفر"
+  if (message.includes("transactions_usd_rate_positive") || message.includes("usd_rates_rate_check")) {
+    return "سعر الدولار يجب أن يكون رقماً صحيحاً أكبر من صفر"
+  }
   if (message.includes("usd_rates_month_check")) return "صيغة الشهر يجب أن تكون YYYY-MM"
   if (message.includes("transactions_direct_source_valid")) {
     return "قناة الاكتساب مطلوبة مع «عميل مباشر» وممنوعة مع «وكيل»"

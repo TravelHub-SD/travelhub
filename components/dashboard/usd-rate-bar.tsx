@@ -54,7 +54,13 @@ export function UsdRateBar({
         return
       }
       setEditing(false)
-      router.refresh()
+      // إعادة تحميل كاملة لا router.refresh().
+      //
+      // السعر يغيّر كل رقم على الصفحة، وقد رُصد أن refresh لا يُحدّث هذه
+      // الصفحة بعد التنقّل بين ?currency=usd والرابط المجرّد: يُحفظ ٤٠٠٠ في
+      // القاعدة ويبقى ٣٦٥٠ على الشاشة. حفظُ سعرٍ يحدث مرّةً في الشهر،
+      // فثمن التحميل الكامل لا شيء أمام عرض رقمٍ خاطئ.
+      window.location.reload()
     } catch {
       setError("تعذّر الاتصال — تحقّق من الشبكة")
     } finally {

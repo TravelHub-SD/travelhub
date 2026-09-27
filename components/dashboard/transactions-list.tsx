@@ -6,7 +6,15 @@ import type { Agent, Transaction } from "@/lib/dashboard-store"
 import { longDate, money, SOURCE_LABEL } from "@/lib/dashboard-format"
 import { TransactionForm } from "@/components/dashboard/transaction-form"
 
-export function TransactionsList({ rows, agents }: { rows: Transaction[]; agents: Agent[] }) {
+export function TransactionsList({
+  rows,
+  agents,
+  defaultUsdRate,
+}: {
+  rows: Transaction[]
+  agents: Agent[]
+  defaultUsdRate?: number | null
+}) {
   const router = useRouter()
   const [editing, setEditing] = useState<Transaction | null>(null)
   const [deleting, setDeleting] = useState<number | null>(null)
@@ -35,6 +43,7 @@ export function TransactionsList({ rows, agents }: { rows: Transaction[]; agents
         <TransactionForm
           agents={agents}
           existing={editing}
+          defaultUsdRate={defaultUsdRate}
           onSaved={() => setEditing(null)}
           onCancel={() => setEditing(null)}
         />

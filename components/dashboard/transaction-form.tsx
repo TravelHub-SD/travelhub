@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from "react"
 import { useRouter } from "next/navigation"
 import { DIRECT_SOURCES, SERVICE_TYPES, SOURCES, type Agent, type Transaction } from "@/lib/dashboard-store"
-import { todayISO } from "@/lib/dashboard-format"
+import { money, todayISO } from "@/lib/dashboard-format"
 import { DateField } from "@/components/dashboard/date-field"
 
 // ارتفاع ٥٦ بكسل لكل حقل: أصغر من ذلك يصعب إصابته بالإبهام على الهاتف.
@@ -19,6 +19,7 @@ type Values = {
   agent_profit: string
   net_profit: string
   direct_source: string
+  usd_rate: string
   note: string
 }
 
@@ -32,6 +33,7 @@ function emptyValues(): Values {
     agent_profit: "",
     net_profit: "",
     direct_source: "",
+    usd_rate: "",
     note: "",
   }
 }
@@ -46,6 +48,7 @@ function fromTransaction(t: Transaction): Values {
     agent_profit: String(t.agent_profit),
     net_profit: String(t.net_profit),
     direct_source: t.direct_source ?? "",
+    usd_rate: t.usd_rate != null ? String(t.usd_rate) : "",
     note: t.note ?? "",
   }
 }
@@ -53,18 +56,27 @@ function fromTransaction(t: Transaction): Values {
 export function TransactionForm({
   agents,
   existing,
+  defaultUsdRate,
   onSaved,
   onCancel,
 }: {
   agents: Agent[]
   existing?: Transaction
+  // سعر الشهر المحفوظ — يملأ الحقل مسبقاً فلا يكلّف تسجيلُ اليوم العادي
+  // ضغطةً واحدة إضافية، ويُعدَّل في اليوم الذي يقفز فيه السعر وحده.
+  defaultUsdRate?: number | null
   onSaved?: () => void
   onCancel?: () => void
 }) {
   const router = useRouter()
   const editing = Boolean(existing)
 
-  const [v, setV] = useState<Values>(() => (existing ? fromTransaction(existing) : emptyValues()))
+  const [v, setV] = useState<Values>(() => {
+    if (existing) return fromTransaction(existing)
+    const base = emptyValues()
+    if (defaultUsdRate) base.usd_rate = String(defaultUsdRate)
+    return base
+  })
   const [error, setError] = useState("")
   const [saved, setSaved] = useState(false)
   const [busy, setBusy] = useState(false)
@@ -72,6 +84,16 @@ export function TransactionForm({
 
   const withAgent = v.source === "وكيل"
   const withChannel = v.source === "مباشر"
+
+  // المعادل بالدولار يُعرض ولا يُخزَّن: المخزَّن هو السعر، فيُحسب الدولار
+  // وقت العرض ولا يتخلّف لو عُدِّل صافي الربح لاحقاً.
+  const usdPreview = (() => {
+    const rate = Number(v.usd_rate)
+    const net = Number(v.net_profit)
+    if (!Number.isFinite(rate) || rate <= 0) return null
+    if (!Number.isFinite(net) || v.net_profit === "") return null
+    return Math.round(net / rate)
+  })()
 
   // في الإضافة نعرض الوكلاء النشطين فقط. في التعديل نُبقي وكيل العملية
   // ولو عُطِّل لاحقاً، وإلا بدا الحقل فارغاً وبدّل الوكيل عند أول حفظ.
@@ -112,6 +134,7 @@ export function TransactionForm({
       agent_profit: withAgent ? Number(v.agent_profit || 0) : 0,
       net_profit: v.net_profit === "" ? null : Number(v.net_profit),
       direct_source: withChannel ? v.direct_source || null : null,
+      usd_rate: v.usd_rate.trim() || null,
       note: v.note.trim() || null,
     }
 
@@ -290,6 +313,34 @@ export function TransactionForm({
           onChange={set("net_profit")}
           className={`${FIELD} font-bold`}
         />
+      </div>
+
+      <div>
+        <label htmlFor="usd_rate" className={LABEL}>
+          سعر الدولار اليوم <span className="font-normal text-slate-400">(اختياري)</span>
+        </label>
+        <input
+          id="usd_rate"
+          type="number"
+          inputMode="numeric"
+          min={1}
+          step={1}
+          placeholder="مثال: 7500"
+          value={v.usd_rate}
+          onChange={set("usd_rate")}
+          className={FIELD}
+        />
+        <p className="mt-1.5 text-xs text-slate-500">
+          {usdPreview !== null ? (
+            <>
+              ما يعادله: <span className="font-bold tabular-nums text-[#164563]">{money(usdPreview)}$</span>
+            </>
+          ) : v.usd_rate ? (
+            "اكتب صافي الربح ليظهر المعادل"
+          ) : (
+            "بلا سعر تُحسب العملية بسعر الشهر"
+          )}
+        </p>
       </div>
 
       <div>

@@ -54,11 +54,19 @@ export function validateTransaction(body: any): { ok: true; value: TransactionIn
     direct_source = ch
   }
 
+  // سعر الدولار اختياري: بلا قيمة يقع الصف على سعر شهره.
+  let usd_rate: number | null = null
+  if (body?.usd_rate !== undefined && body?.usd_rate !== null && String(body.usd_rate).trim() !== "") {
+    const r = asInt(body.usd_rate)
+    if (r === null || r <= 0) return { ok: false, error: "سعر الدولار يجب أن يكون رقماً صحيحاً أكبر من صفر" }
+    usd_rate = r
+  }
+
   const rawNote = body?.note
   const note = typeof rawNote === "string" && rawNote.trim() ? rawNote.trim().slice(0, 500) : null
 
   return {
     ok: true,
-    value: { date, service_type, source, agent_id, quantity, agent_profit, net_profit, direct_source, note },
+    value: { date, service_type, source, agent_id, quantity, agent_profit, net_profit, direct_source, usd_rate, note },
   }
 }

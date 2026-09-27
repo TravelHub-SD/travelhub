@@ -7,15 +7,27 @@ import { UsdRateBar } from "@/components/dashboard/usd-rate-bar"
 
 export const dynamic = "force-dynamic"
 
+// كل صفّ يُحوَّل بسعره هو — سعر لحظة العملية إن سُجِّل، وإلا سعر الشهر.
+// التحويل قبل الجمع لا بعده: مجموعُ شهرٍ قفز فيه السعر لا يصفه سعرٌ واحد.
+type Priced = Transaction & { usd: number }
+
+function priceRows(rows: Transaction[], monthRate: number | null): Priced[] {
+  return rows.map((r) => {
+    const rate = r.usd_rate ?? monthRate
+    return { ...r, usd: rate ? r.net_profit / rate : 0 }
+  })
+}
+
 // ─── حساب أرقام الشهر ────────────────────────────────────────────────────────
 // الشهر الجاري يُقاس بالأيام المنقضية منه فقط: قسمة ربح ١٠ أيام على ٣٠ يوماً
 // تعطي معدّلاً يبدو ثلث الحقيقة، وأيام المستقبل ليست "أيام صفر" بعد.
-function summarize(rows: Transaction[], ym: string) {
+function summarize(rows: Priced[], ym: string) {
   const { days } = monthRange(ym)
   const today = todayISO()
   const elapsed = ym === currentMonth() ? Number(today.slice(8, 10)) : days
 
   const total = rows.reduce((s, r) => s + r.net_profit, 0)
+  const totalUsd = rows.reduce((s, r) => s + r.usd, 0)
   const withDays = new Set(rows.map((r) => r.date))
 
   let zeroDays = 0
@@ -26,14 +38,16 @@ function summarize(rows: Transaction[], ym: string) {
 
   return {
     total,
+    totalUsd,
     count: rows.length,
     zeroDays,
     elapsed,
-    perDay: elapsed > 0 ? Math.round(total / elapsed) : 0,
+    perDay: elapsed > 0 ? total / elapsed : 0,
+    perDayUsd: elapsed > 0 ? totalUsd / elapsed : 0,
   }
 }
 
-function bySource(rows: Transaction[]) {
+function bySource(rows: Priced[]) {
   const total = rows.reduce((s, r) => s + r.net_profit, 0)
   return (["وكيل", "مباشر"] as const).map((src) => {
     const of = rows.filter((r) => r.source === src)
@@ -41,61 +55,68 @@ function bySource(rows: Transaction[]) {
     return {
       source: SOURCE_LABEL[src],
       sum,
+      usd: of.reduce((s, r) => s + r.usd, 0),
       count: of.length,
       share: total ? Math.round((sum / total) * 100) : 0,
     }
   })
 }
 
-function byService(rows: Transaction[]) {
-  const map = new Map<string, { sum: number; count: number }>()
+function byService(rows: Priced[]) {
+  const map = new Map<string, { sum: number; usd: number; count: number }>()
   for (const r of rows) {
-    const cur = map.get(r.service_type) || { sum: 0, count: 0 }
+    const cur = map.get(r.service_type) || { sum: 0, usd: 0, count: 0 }
     cur.sum += r.net_profit
+    cur.usd += r.usd
     cur.count += 1
     map.set(r.service_type, cur)
   }
   return [...map.entries()]
-    .map(([service, v]) => ({ service, ...v, avg: Math.round(v.sum / v.count) }))
+    .map(([service, v]) => ({ service, ...v, avg: v.sum / v.count, avgUsd: v.usd / v.count }))
     .sort((a, b) => b.sum - a.sum)
 }
 
 // العمليات المباشرة وحدها — الوكيل ليس قناة اكتساب. الصفوف الأقدم من
 // العمود قيمتها null فتُجمَّع تحت "غير محدد" بدل أن تختفي.
-function byChannel(rows: Transaction[]) {
-  const map = new Map<string, { sum: number; count: number }>()
+function byChannel(rows: Priced[]) {
+  const map = new Map<string, { sum: number; usd: number; count: number }>()
   for (const r of rows) {
     if (r.source !== "مباشر") continue
     const key = r.direct_source || "غير محدد"
-    const cur = map.get(key) || { sum: 0, count: 0 }
+    const cur = map.get(key) || { sum: 0, usd: 0, count: 0 }
     cur.sum += r.net_profit
+    cur.usd += r.usd
     cur.count += 1
     map.set(key, cur)
   }
   return [...map.entries()]
-    .map(([channel, v]) => ({ channel, ...v, avg: Math.round(v.sum / v.count) }))
+    .map(([channel, v]) => ({ channel, ...v, avg: v.sum / v.count, avgUsd: v.usd / v.count }))
     .sort((a, b) => b.sum - a.sum)
 }
 
-function byAgent(rows: Transaction[]) {
-  const map = new Map<string, { sum: number; count: number }>()
+function byAgent(rows: Priced[]) {
+  const map = new Map<string, { sum: number; usd: number; count: number }>()
   for (const r of rows) {
     if (r.source !== "وكيل") continue
     const name = r.agents?.name || `وكيل #${r.agent_id}`
-    const cur = map.get(name) || { sum: 0, count: 0 }
+    const cur = map.get(name) || { sum: 0, usd: 0, count: 0 }
     cur.sum += r.net_profit
+    cur.usd += r.usd
     cur.count += 1
     map.set(name, cur)
   }
   return [...map.entries()].map(([name, v]) => ({ name, ...v })).sort((a, b) => b.sum - a.sum)
 }
 
-function dailySeries(rows: Transaction[], ym: string) {
+function dailySeries(rows: Priced[], ym: string) {
   const { days } = monthRange(ym)
-  const out = Array.from({ length: days }, (_, i) => ({ day: i + 1, sum: 0 }))
+  const out = Array.from({ length: days }, (_, i) => ({ day: i + 1, sum: 0, usd: 0 }))
   for (const r of rows) {
     const d = Number(r.date.slice(8, 10))
-    if (d >= 1 && d <= days) out[d - 1].sum += r.net_profit
+    if (d >= 1 && d <= days) {
+      out[d - 1].sum += r.net_profit
+      out[d - 1].usd += r.usd
+    }
   }
   return out
 }
@@ -147,16 +168,18 @@ export default async function DashboardHomePage({
   // الدولار متاح فقط بسعرٍ محفوظ: بلا سعر لا تحويل، لا تخميناً.
   const currency: "sdg" | "usd" = currencyParam === "usd" && usd.rate ? "usd" : "sdg"
   const unit = currency === "usd" ? "دولار" : "جنيه"
-  // كل الأرقام تمرّ من هنا، فلا يبقى مبلغٌ بعملة غير المختارة.
-  const amount = (n: number) => (currency === "usd" && usd.rate ? money(Math.round(n / usd.rate)) : money(n))
+  // القيمتان محسوبتان مسبقاً لكل صفّ بسعره؛ هنا نختار أيّهما تُعرض فقط.
+  const amount = (sdg: number, dollars: number) =>
+    currency === "usd" ? money(Math.round(dollars)) : money(Math.round(sdg))
 
-  const s = summarize(rows, ym)
-  const sources = bySource(rows)
-  const services = byService(rows)
-  const agents = byAgent(rows)
-  const channels = byChannel(rows)
-  const series = dailySeries(rows, ym)
-  const peak = Math.max(1, ...series.map((d) => Math.abs(d.sum)))
+  const priced = priceRows(rows, usd.rate)
+  const s = summarize(priced, ym)
+  const sources = bySource(priced)
+  const services = byService(priced)
+  const agents = byAgent(priced)
+  const channels = byChannel(priced)
+  const series = dailySeries(priced, ym)
+  const peak = Math.max(1, ...series.map((d) => Math.abs(currency === "usd" ? d.usd : d.sum)))
 
   return (
     <div className="space-y-4">
@@ -178,8 +201,8 @@ export default async function DashboardHomePage({
       )}
 
       <div className="grid grid-cols-2 gap-3">
-        <Stat label="إجمالي صافي الربح" value={amount(s.total)} hint={unit} />
-        <Stat label="المعدل اليومي" value={amount(s.perDay)} hint={`${unit} · على ${s.elapsed} يوم`} />
+        <Stat label="إجمالي صافي الربح" value={amount(s.total, s.totalUsd)} hint={unit} />
+        <Stat label="المعدل اليومي" value={amount(s.perDay, s.perDayUsd)} hint={`${unit} · على ${s.elapsed} يوم`} />
         <Stat label="عدد العمليات" value={money(s.count)} />
         <Stat label="أيام الصفر" value={money(s.zeroDays)} hint={`من ${s.elapsed} يوم`} />
       </div>
@@ -206,7 +229,7 @@ export default async function DashboardHomePage({
               <tr key={r.source} className="border-b border-slate-50 last:border-0">
                 <td className={`${TD} font-semibold`}>{r.source}</td>
                 <td className={`${TD} text-slate-500`}>{money(r.count)}</td>
-                <td className={`${TD} font-bold`}>{amount(r.sum)}</td>
+                <td className={`${TD} font-bold`}>{amount(r.sum, r.usd)}</td>
                 <td className={`${TD} text-slate-500`}>{r.share}%</td>
               </tr>
             ))}
@@ -230,8 +253,8 @@ export default async function DashboardHomePage({
                 <tr key={r.service} className="border-b border-slate-50 last:border-0">
                   <td className={`${TD} font-semibold`}>{r.service}</td>
                   <td className={`${TD} text-slate-500`}>{money(r.count)}</td>
-                  <td className={`${TD} font-bold`}>{amount(r.sum)}</td>
-                  <td className={`${TD} text-slate-500`}>{amount(r.avg)}</td>
+                  <td className={`${TD} font-bold`}>{amount(r.sum, r.usd)}</td>
+                  <td className={`${TD} text-slate-500`}>{amount(r.avg, r.avgUsd)}</td>
                 </tr>
               ))}
             </tbody>
@@ -257,8 +280,8 @@ export default async function DashboardHomePage({
                 <tr key={r.channel} className="border-b border-slate-50 last:border-0">
                   <td className={`${TD} font-semibold`}>{r.channel}</td>
                   <td className={`${TD} text-slate-500`}>{money(r.count)}</td>
-                  <td className={`${TD} font-bold`}>{amount(r.sum)}</td>
-                  <td className={`${TD} text-slate-500`}>{amount(r.avg)}</td>
+                  <td className={`${TD} font-bold`}>{amount(r.sum, r.usd)}</td>
+                  <td className={`${TD} text-slate-500`}>{amount(r.avg, r.avgUsd)}</td>
                 </tr>
               ))}
             </tbody>
@@ -285,7 +308,7 @@ export default async function DashboardHomePage({
                     <span className="ms-1 text-xs text-slate-400">{i + 1}.</span> {r.name}
                   </td>
                   <td className={`${TD} text-slate-500`}>{money(r.count)}</td>
-                  <td className={`${TD} font-bold`}>{amount(r.sum)}</td>
+                  <td className={`${TD} font-bold`}>{amount(r.sum, r.usd)}</td>
                 </tr>
               ))}
             </tbody>
@@ -300,13 +323,14 @@ export default async function DashboardHomePage({
         <div className="overflow-x-auto pb-1">
           <div className="flex h-40 min-w-full items-end gap-1" style={{ minWidth: `${series.length * 18}px` }}>
             {series.map((d) => {
-              const h = Math.round((Math.abs(d.sum) / peak) * 100)
+              const val = currency === "usd" ? d.usd : d.sum
+              const h = Math.round((Math.abs(val) / peak) * 100)
               return (
-                <div key={d.day} className="flex flex-1 flex-col items-center gap-1" title={`${d.day}: ${amount(d.sum)} ${unit}`}>
+                <div key={d.day} className="flex flex-1 flex-col items-center gap-1" title={`${d.day}: ${amount(d.sum, d.usd)} ${unit}`}>
                   <div className="flex h-32 w-full items-end">
                     <div
-                      className={`w-full rounded-t ${d.sum < 0 ? "bg-red-400" : d.sum > 0 ? "bg-[#164563]" : "bg-slate-200"}`}
-                      style={{ height: `${d.sum === 0 ? 2 : Math.max(h, 3)}%` }}
+                      className={`w-full rounded-t ${val < 0 ? "bg-red-400" : val > 0 ? "bg-[#164563]" : "bg-slate-200"}`}
+                      style={{ height: `${val === 0 ? 2 : Math.max(h, 3)}%` }}
                     />
                   </div>
                   <span className="text-[9px] tabular-nums text-slate-400">{d.day}</span>

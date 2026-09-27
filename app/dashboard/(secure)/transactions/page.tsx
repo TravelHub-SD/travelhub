@@ -1,6 +1,6 @@
 import { Suspense } from "react"
-import { listAgents, listTransactions, type Transaction } from "@/lib/dashboard-store"
-import { money } from "@/lib/dashboard-format"
+import { listAgents, listTransactions, usdRateFor, type Transaction } from "@/lib/dashboard-store"
+import { currentMonth, money } from "@/lib/dashboard-format"
 import { TransactionFilters } from "@/components/dashboard/transaction-filters"
 import { TransactionsList } from "@/components/dashboard/transactions-list"
 
@@ -18,8 +18,9 @@ type Params = {
 export default async function TransactionsPage({ searchParams }: { searchParams: Promise<Params> }) {
   const p = await searchParams
 
-  const [agents, result] = await Promise.all([
+  const [agents, usd, result] = await Promise.all([
     listAgents().catch(() => []),
+    usdRateFor(currentMonth()).catch(() => ({ rate: null, from: null, exact: false })),
     listTransactions({
       from: p.from || undefined,
       to: p.to || undefined,
@@ -54,7 +55,7 @@ export default async function TransactionsPage({ searchParams }: { searchParams:
         </p>
       )}
 
-      <TransactionsList rows={result.rows} agents={agents} />
+      <TransactionsList rows={result.rows} agents={agents} defaultUsdRate={usd.rate} />
     </div>
   )
 }
