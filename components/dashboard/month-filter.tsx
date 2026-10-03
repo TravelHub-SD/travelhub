@@ -3,7 +3,9 @@
 import { useRouter, useSearchParams } from "next/navigation"
 import { monthLabel, recentMonths } from "@/lib/dashboard-format"
 
-export function MonthFilter({ value }: { value: string }) {
+// path: الصفحة التي يعيد إليها الاختيار — اللوحة افتراضياً، ويستعمله قسم
+// المنصرفات بمساره.
+export function MonthFilter({ value, path = "/dashboard" }: { value: string; path?: string }) {
   const router = useRouter()
   const params = useSearchParams()
   const months = recentMonths()
@@ -19,7 +21,7 @@ export function MonthFilter({ value }: { value: string }) {
       onChange={(e) => {
         const next = new URLSearchParams(params.toString())
         next.set("month", e.target.value)
-        router.push(`/dashboard?${next.toString()}`)
+        router.push(`${path}?${next.toString()}`)
       }}
       className="h-11 rounded-xl border border-slate-300 bg-white px-3 text-sm font-semibold text-[#164563] outline-none focus:border-[#EF790F]"
     >

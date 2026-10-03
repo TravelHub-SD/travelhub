@@ -1,7 +1,7 @@
 /**
  * proxy.ts
  * ─────────────────────────────────────────────────────────────
- * حارس /dashboard — يعمل **قبل** رسم أي صفحة.
+ * حارس /dashboard و/admin/finances — يعمل **قبل** رسم أي صفحة.
  * (كان اسمه middleware؛ Next 16 يسمّي هذا الملف proxy.)
  *
  * لماذا هنا لا في الـ layout: redirect() داخل layout لا يمنع رسم
@@ -18,6 +18,14 @@
  */
 
 import { type NextRequest, NextResponse } from "next/server"
+import {
+  ACCESS_COOKIE,
+  REFRESH_COOKIE,
+  clearedCookies,
+  cookieOptions,
+  isFresh,
+  refreshSession,
+} from "@/lib/finance-session"
 
 const COOKIE = "th_dash"
 const MESSAGE = "travelhub-dashboard-v1"
@@ -40,6 +48,14 @@ function sameToken(a: string, b: string): boolean {
 }
 
 export async function proxy(request: NextRequest) {
+  const path = request.nextUrl.pathname
+  if (path.startsWith("/admin/finances") || path.startsWith("/api/admin/finances")) {
+    return financeGuard(request)
+  }
+  return dashboardGuard(request)
+}
+
+async function dashboardGuard(request: NextRequest) {
   const password = process.env.DASHBOARD_PASSWORD
   const cookie = request.cookies.get(COOKIE)?.value
 
@@ -53,13 +69,72 @@ export async function proxy(request: NextRequest) {
   return NextResponse.redirect(url)
 }
 
-// كل ما تحت /dashboard عدا صفحة الدخول نفسها. مسارات الـ API تتحقّق
-// بنفسها في كل دالة، فلا نضاعف المنطق هنا.
+/**
+ * حارس قسم المنصرفات الشخصية.
+ *
+ * عمله الأساسي **تجديد** الجلسة لا الحكم عليها: رمز الدخول في Supabase
+ * يعيش ساعة، وصفحات الخادم لا تستطيع كتابة الكعكات. فإن قارب الرمز
+ * الانتهاء نجدّده هنا، ونمرّر الجديد إلى الصفحة في نفس الطلب وإلى
+ * المتصفح في الردّ — وإلا لطُرد المستخدم كل ساعة.
+ *
+ * أمّا من يُسمح له فتقرّره قاعدة البيانات نفسها عند كل قراءة: RLS
+ * على auth.uid() وقائمة finance_owners. رمزٌ مزوّر يعبر هذا الحارس
+ * (لا نتحقّق من توقيعه هنا) ثم يُرفض هناك بلا صفٍّ واحد.
+ */
+async function financeGuard(request: NextRequest) {
+  const path = request.nextUrl.pathname
+  const isApi = path.startsWith("/api/")
+  // صفحة الدخول ومسارها لا يحتاجان جلسة — هما طريق الحصول عليها.
+  if (path === "/admin/finances/login" || path === "/api/admin/finances/auth") {
+    return NextResponse.next()
+  }
+
+  const access = request.cookies.get(ACCESS_COOKIE)?.value
+  if (isFresh(access)) return NextResponse.next()
+
+  const refresh = request.cookies.get(REFRESH_COOKIE)?.value
+  const session = refresh ? await refreshSession(refresh) : null
+
+  if (session) {
+    // الكعكة على الطلب تصل الصفحة الآن؛ وعلى الردّ تصل المتصفح للطلبات التالية.
+    request.cookies.set(ACCESS_COOKIE, session.access_token)
+    request.cookies.set(REFRESH_COOKIE, session.refresh_token)
+    const res = NextResponse.next({ request })
+    res.cookies.set(ACCESS_COOKIE, session.access_token, cookieOptions())
+    res.cookies.set(REFRESH_COOKIE, session.refresh_token, cookieOptions())
+    return res
+  }
+
+  const res = isApi
+    ? NextResponse.json({ error: "انتهت الجلسة — سجّل الدخول من جديد" }, { status: 401 })
+    : (() => {
+        const url = request.nextUrl.clone()
+        url.pathname = "/admin/finances/login"
+        url.search = ""
+        url.searchParams.set("next", path)
+        return NextResponse.redirect(url)
+      })()
+  // كعكاتٌ ميتة تُمسح، فلا تُعاد محاولة تجديدها في كل طلب.
+  if (access || refresh) for (const c of clearedCookies) res.cookies.set(c)
+  return res
+}
+
+// لوحة العمليات: كل ما تحت /dashboard عدا صفحة الدخول نفسها. مسارات
+// الـ API هناك تتحقّق بنفسها في كل دالة، فلا نضاعف المنطق.
+//
+// المنصرفات: الصفحات **ومساراتها** معاً، لأن التجديد هنا لا الحكم —
+// طلب حفظٍ برمزٍ انتهى قبل دقيقة يجب أن يُجدَّد لا أن يفشل.
 //
 // ملف proxy يعمل على Node دائماً (يرفض Next أي إعداد runtime هنا)، وهذا
 // ما نريده: متغيّر البيئة يُقرأ وقت الطلب كما يقرأه مسار الدخول. لو اختلفت
 // الآليتان لحمل الحارس كلمةً قديمة بعد أي تغيير بلا إعادة نشر — فتنجح في
 // تسجيل الدخول ويرفضك الحارس، وتُقفل خارج لوحتك بلا سبب ظاهر.
 export const config = {
-  matcher: ["/dashboard", "/dashboard/((?!login).*)"],
+  matcher: [
+    "/dashboard",
+    "/dashboard/((?!login).*)",
+    "/admin/finances",
+    "/admin/finances/:path*",
+    "/api/admin/finances/:path*",
+  ],
 }
