@@ -76,7 +76,7 @@ create trigger usd_rates_audit
 -- السجلّ نفسه لا يُعدَّل ولا يُحذف منه، وإلا كان حاجزاً يُزال بسطر.
 -- للتقليم المتعمَّد بعد سنوات: set local travelhub.audit_prune = 'on';
 create or replace function dashboard_audit_immutable() returns trigger
-language plpgsql as $$
+language plpgsql set search_path = public as $$
 begin
   if coalesce(current_setting('travelhub.audit_prune', true), 'off') = 'on' then
     return null;
@@ -104,7 +104,7 @@ create trigger dashboard_audit_locked
 --   delete from transactions where date < '2024-01-01';
 --   commit;
 create or replace function dashboard_guard_bulk() returns trigger
-language plpgsql as $$
+language plpgsql set search_path = public as $$
 declare
   affected_rows integer;
   cap integer := coalesce(nullif(current_setting('travelhub.bulk_cap', true), '')::integer, 5);
@@ -203,3 +203,18 @@ begin
 
   return restored;
 end $$;
+
+-- ── ④ من يستدعي هذه الدوال ───────────────────────────────────
+-- كل دالة في public تُعرض تلقائياً على /rest/v1/rpc/<اسمها>، وSupabase
+-- يمنح EXECUTE على الدوال الجديدة لـ anon وauthenticated افتراضياً. ودالة
+-- الاسترجاع SECURITY DEFINER تكتب في transactions بصلاحيات مالكها —
+-- فكان أي حامل للمفتاح العام يستطيع استدعاءها وإرجاع عملياتٍ حُذفت
+-- عمداً. كُشف ذلك بفاحص الأمان في Supabase بعد أسبوع من إضافتها.
+--
+-- الاسترجاع عملٌ إداري يُشغَّل من محرّر SQL، فلا يحتاج أيّاً من الدورين.
+-- ودوال المشغّلات لا تحتاج EXECUTE لتعمل: الصلاحية تُفحص عند إنشاء
+-- المشغّل لا عند إطلاقه، فسحبها يُغلق الباب دون أن يوقف السجلّ والحاجز.
+revoke execute on function dashboard_restore_transactions(timestamptz) from public, anon, authenticated;
+revoke execute on function dashboard_audit_row()       from public, anon, authenticated;
+revoke execute on function dashboard_audit_immutable() from public, anon, authenticated;
+revoke execute on function dashboard_guard_bulk()      from public, anon, authenticated;
