@@ -1,7 +1,7 @@
 /**
  * proxy.ts
  * ─────────────────────────────────────────────────────────────
- * حارس /dashboard و/admin/finances — يعمل **قبل** رسم أي صفحة.
+ * حارس /dashboard وأقسام /admin — يعمل **قبل** رسم أي صفحة.
  * (كان اسمه middleware؛ Next 16 يسمّي هذا الملف proxy.)
  *
  * لماذا هنا لا في الـ layout: redirect() داخل layout لا يمنع رسم
@@ -25,7 +25,8 @@ import {
   cookieOptions,
   isFresh,
   refreshSession,
-} from "@/lib/finance-session"
+} from "@/lib/admin-session"
+import { sectionForPath, type AdminSection } from "@/lib/admin-sections"
 
 const COOKIE = "th_dash"
 const MESSAGE = "travelhub-dashboard-v1"
@@ -48,10 +49,8 @@ function sameToken(a: string, b: string): boolean {
 }
 
 export async function proxy(request: NextRequest) {
-  const path = request.nextUrl.pathname
-  if (path.startsWith("/admin/finances") || path.startsWith("/api/admin/finances")) {
-    return financeGuard(request)
-  }
+  const section = sectionForPath(request.nextUrl.pathname)
+  if (section) return adminGuard(request, section)
   return dashboardGuard(request)
 }
 
@@ -70,22 +69,23 @@ async function dashboardGuard(request: NextRequest) {
 }
 
 /**
- * حارس قسم المنصرفات الشخصية.
+ * حارس أقسام /admin (المنصرفات الشخصية، الموافقات الأمنية).
  *
  * عمله الأساسي **تجديد** الجلسة لا الحكم عليها: رمز الدخول في Supabase
  * يعيش ساعة، وصفحات الخادم لا تستطيع كتابة الكعكات. فإن قارب الرمز
  * الانتهاء نجدّده هنا، ونمرّر الجديد إلى الصفحة في نفس الطلب وإلى
  * المتصفح في الردّ — وإلا لطُرد المستخدم كل ساعة.
  *
- * أمّا من يُسمح له فتقرّره قاعدة البيانات نفسها عند كل قراءة: RLS
- * على auth.uid() وقائمة finance_owners. رمزٌ مزوّر يعبر هذا الحارس
- * (لا نتحقّق من توقيعه هنا) ثم يُرفض هناك بلا صفٍّ واحد.
+ * الجلسة واحدة للأقسام كلها، فالتجديد واحد. أمّا من يُسمح له بماذا
+ * فتقرّره قاعدة البيانات نفسها عند كل قراءة: RLS على auth.uid() وقائمة
+ * أهل كل قسم. رمزٌ مزوّر يعبر هذا الحارس (لا نتحقّق من توقيعه هنا) ثم
+ * يُرفض هناك بلا صفٍّ واحد.
  */
-async function financeGuard(request: NextRequest) {
+async function adminGuard(request: NextRequest, section: AdminSection) {
   const path = request.nextUrl.pathname
   const isApi = path.startsWith("/api/")
   // صفحة الدخول ومسارها لا يحتاجان جلسة — هما طريق الحصول عليها.
-  if (path === "/admin/finances/login" || path === "/api/admin/finances/auth") {
+  if (path === section.login || path === section.authApi) {
     return NextResponse.next()
   }
 
@@ -109,9 +109,9 @@ async function financeGuard(request: NextRequest) {
     ? NextResponse.json({ error: "انتهت الجلسة — سجّل الدخول من جديد" }, { status: 401 })
     : (() => {
         const url = request.nextUrl.clone()
-        url.pathname = "/admin/finances/login"
+        url.pathname = section.login
         url.search = ""
-        url.searchParams.set("next", path)
+        url.searchParams.set("next", path + request.nextUrl.search)
         return NextResponse.redirect(url)
       })()
   // كعكاتٌ ميتة تُمسح، فلا تُعاد محاولة تجديدها في كل طلب.
@@ -122,7 +122,7 @@ async function financeGuard(request: NextRequest) {
 // لوحة العمليات: كل ما تحت /dashboard عدا صفحة الدخول نفسها. مسارات
 // الـ API هناك تتحقّق بنفسها في كل دالة، فلا نضاعف المنطق.
 //
-// المنصرفات: الصفحات **ومساراتها** معاً، لأن التجديد هنا لا الحكم —
+// أقسام /admin: الصفحات **ومساراتها** معاً، لأن التجديد هنا لا الحكم —
 // طلب حفظٍ برمزٍ انتهى قبل دقيقة يجب أن يُجدَّد لا أن يفشل.
 //
 // ملف proxy يعمل على Node دائماً (يرفض Next أي إعداد runtime هنا)، وهذا
@@ -136,5 +136,8 @@ export const config = {
     "/admin/finances",
     "/admin/finances/:path*",
     "/api/admin/finances/:path*",
+    "/admin/approvals",
+    "/admin/approvals/:path*",
+    "/api/admin/approvals/:path*",
   ],
 }

@@ -1,10 +1,9 @@
 import { Suspense } from "react"
 import { redirect } from "next/navigation"
-import { financeToken } from "@/lib/finance-auth"
+import { adminToken } from "@/lib/admin-auth"
+import { AdminAuthError, AdminForbiddenError } from "@/lib/admin-rest"
 import {
   agencyNetProfit,
-  FinanceAuthError,
-  FinanceForbiddenError,
   listCategories,
   listExpenses,
   type Expense,
@@ -139,7 +138,7 @@ export default async function PersonalFinancePage({ searchParams }: { searchPara
   const { from, to } = monthRange(ym)
   const here = month ? `${PATH}?month=${ym}` : PATH
 
-  const token = await financeToken()
+  const token = await adminToken()
   if (!token) redirect(`/admin/finances/login?next=${encodeURIComponent(here)}`)
 
   let categories: ExpenseCategory[] = []
@@ -154,8 +153,8 @@ export default async function PersonalFinancePage({ searchParams }: { searchPara
       agencyNetProfit(token, from, to),
     ])
   } catch (e) {
-    if (e instanceof FinanceAuthError) failure = "auth"
-    else if (e instanceof FinanceForbiddenError) failure = "forbidden"
+    if (e instanceof AdminAuthError) failure = "auth"
+    else if (e instanceof AdminForbiddenError) failure = "forbidden"
     else error = e instanceof Error ? e.message : String(e)
   }
 

@@ -1,12 +1,12 @@
 import { type NextRequest, NextResponse } from "next/server"
-import { errorResponse, financeToken, NO_SESSION } from "@/lib/finance-auth"
+import { adminToken, errorResponse, NO_SESSION } from "@/lib/admin-auth"
 import { createExpense } from "@/lib/finance-store"
 import { validateExpense } from "@/lib/finance-validate"
 
 export const dynamic = "force-dynamic"
 
 export async function POST(request: NextRequest) {
-  const token = await financeToken()
+  const token = await adminToken()
   if (!token) return NextResponse.json(NO_SESSION, { status: 401 })
 
   const body = await request.json().catch(() => ({}))

@@ -10,7 +10,7 @@
  * ─────────────────────────────────────────────────────────────
  */
 
-import { publicKey, supabaseUrl } from "@/lib/finance-session"
+import { AdminNotFoundError, userRest, userRestAll, type PgFailure } from "@/lib/admin-rest"
 
 export interface ExpenseCategory {
   id: string
@@ -35,51 +35,20 @@ export interface ExpenseInput {
   note: string | null
 }
 
-/** الرمز مرفوض (منتهٍ أو مزوّر) — المطلوب دخولٌ جديد. */
-export class FinanceAuthError extends Error {}
-/** الرمز سليم لكن صاحبه ليس مالكاً — أو RLS رفض الصف. */
-export class FinanceForbiddenError extends Error {}
-/** البند غير موجود — أو موجود لغيرك، وRLS لا يفرّق بينهما عمداً. */
-export class FinanceNotFoundError extends Error {}
+const DENIED = "هذا الحساب غير مخوّل لقسم المنصرفات"
 
-async function rest<T>(token: string, path: string, init: RequestInit = {}): Promise<T> {
-  const res = await fetch(`${supabaseUrl()}/rest/v1/${path}`, {
-    ...init,
-    headers: {
-      apikey: publicKey(),
-      Authorization: `Bearer ${token}`,
-      "Content-Type": "application/json",
-      ...init.headers,
-    },
-    cache: "no-store",
-  })
-  const text = await res.text()
-  if (res.status === 401) throw new FinanceAuthError("انتهت الجلسة — سجّل الدخول من جديد")
-  if (!res.ok) throw pgError(text, res.status)
-  return (text ? JSON.parse(text) : null) as T
+/** رسائل قيود المنصرفات — الباقي تتولّاه lib/admin-rest.ts. */
+function expenseError(f: PgFailure): string | null {
+  if (f.message.includes("personal_expenses_amount_check")) return "المبلغ يجب أن يكون أكبر من صفر"
+  if (f.message.includes("personal_expenses_note_check")) return "الملاحظة أطول من ٥٠٠ حرف"
+  if (f.code === "23503") return "تصنيف غير معروف"
+  if (f.code === "22P02") return "قيمة غير صالحة"
+  return null
 }
 
-function pgError(body: string, status: number): Error {
-  let message = body
-  let code = ""
-  try {
-    const j = JSON.parse(body)
-    message = j.message || body
-    code = j.code || ""
-  } catch {}
-  if (code === "42501" || status === 403) return new FinanceForbiddenError("هذا الحساب غير مخوّل لقسم المنصرفات")
-  if (message.includes("personal_expenses_amount_check")) return new Error("المبلغ يجب أن يكون أكبر من صفر")
-  if (message.includes("personal_expenses_note_check")) return new Error("الملاحظة أطول من ٥٠٠ حرف")
-  if (code === "23503") return new Error("تصنيف غير معروف")
-  if (code === "22P02") return new Error("قيمة غير صالحة")
-  // حاجز الحذف الجماعي — رسالته عربية أصلاً وتشرح نفسها
-  if (message.includes("عملية جماعية مرفوضة")) return new Error(message)
-  return new Error(`خطأ من قاعدة البيانات (${status}): ${message.slice(0, 200)}`)
+function rest<T>(token: string, path: string, init: RequestInit = {}): Promise<T> {
+  return userRest<T>(token, path, init, expenseError, DENIED)
 }
-
-// PostgREST في Supabase يقصّ أي ردّ عند ١٠٠٠ صف بصمت. شهرٌ بأكثر من ألف
-// بند نادر، لكن مجموعاً ناقصاً بلا أي إشارة أسوأ من أن نحتاط.
-const PAGE = 1000
 
 const EXPENSE_SELECT = "id,date,category_id,amount,note,created_at,expense_categories(name)"
 
@@ -88,16 +57,12 @@ export async function listCategories(token: string): Promise<ExpenseCategory[]> 
 }
 
 export async function listExpenses(token: string, from: string, to: string): Promise<Expense[]> {
-  const out: Expense[] = []
-  for (let offset = 0; ; offset += PAGE) {
-    const page = await rest<Expense[]>(
-      token,
-      `personal_expenses?select=${EXPENSE_SELECT}&date=gte.${from}&date=lte.${to}` +
-        `&order=date.desc,created_at.desc&limit=${PAGE}&offset=${offset}`,
-    )
-    out.push(...page)
-    if (page.length < PAGE) return out
-  }
+  return userRestAll<Expense>(
+    token,
+    `personal_expenses?select=${EXPENSE_SELECT}&date=gte.${from}&date=lte.${to}&order=date.desc,created_at.desc`,
+    expenseError,
+    DENIED,
+  )
 }
 
 // user_id لا يُرسل: القاعدة تملؤه من الجلسة (default auth.uid())، وRLS
@@ -117,7 +82,7 @@ export async function updateExpense(token: string, id: string, input: ExpenseInp
     headers: { Prefer: "return=representation" },
     body: JSON.stringify(input),
   })
-  if (!rows.length) throw new FinanceNotFoundError("البند غير موجود")
+  if (!rows.length) throw new AdminNotFoundError("البند غير موجود")
   return rows[0]
 }
 
@@ -128,7 +93,7 @@ export async function deleteExpense(token: string, id: string): Promise<void> {
     method: "DELETE",
     headers: { Prefer: "return=representation" },
   })
-  if (!rows.length) throw new FinanceNotFoundError("البند غير موجود")
+  if (!rows.length) throw new AdminNotFoundError("البند غير موجود")
 }
 
 /**

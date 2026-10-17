@@ -2,6 +2,7 @@
 
 import Link from "next/link"
 import { usePathname, useRouter } from "next/navigation"
+import { RouterFlush } from "@/components/router-flush"
 
 const LINKS = [
   { href: "/dashboard/new", label: "عملية جديدة" },
@@ -49,6 +50,7 @@ export function DashboardNav() {
           })}
         </ul>
       </nav>
+      <RouterFlush />
     </header>
   )
 }
