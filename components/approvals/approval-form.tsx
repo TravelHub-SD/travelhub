@@ -2,13 +2,14 @@
 
 import { useId, useMemo, useRef, useState } from "react"
 import { useRouter } from "next/navigation"
+import { CircleCheck, LoaderCircle, Sparkles } from "lucide-react"
 import { todayISO } from "@/lib/dashboard-format"
 import { STATUSES, STATUS_STYLE, cents, fromCents, usd, type Approval, type ApprovalStatus } from "@/lib/approvals-format"
 import { DateField } from "@/components/dashboard/date-field"
+import { STATUS_ICON, T } from "@/components/approvals/ui"
 
-const FIELD =
-  "h-12 w-full rounded-xl border border-slate-300 bg-white px-3.5 text-base outline-none focus:border-[#EF790F] focus:ring-2 focus:ring-[#EF790F]/30"
-const LABEL = "mb-1 block text-xs font-bold text-slate-600"
+const FIELD = T.field
+const LABEL = T.label
 
 type Values = {
   full_name: string
@@ -39,18 +40,22 @@ export function ApprovalForm({
   presets,
   onSaved,
   onCancel,
+  nameRef: externalNameRef,
 }: {
   existing?: Approval
   agents: string[]
   presets: { sale: number; cost: number }[]
   onSaved?: (row: Approval) => void
   onCancel?: () => void
+  /** لزرّ «طلب جديد» على الشاشة العريضة: يضع المؤشر في الاسم مباشرة */
+  nameRef?: React.RefObject<HTMLInputElement | null>
 }) {
   const router = useRouter()
   const editing = Boolean(existing)
   const uid = useId()
   const id = (n: string) => `${uid}-${n}`
-  const nameRef = useRef<HTMLInputElement>(null)
+  const ownNameRef = useRef<HTMLInputElement>(null)
+  const nameRef = externalNameRef ?? ownNameRef
 
   const [v, setV] = useState<Values>(() =>
     existing
@@ -126,7 +131,7 @@ export function ApprovalForm({
 
       // تبقى الجهة والتاريخ والحالة والأسعار: الطلبات تأتي دفعات — أربعة
       // من «تايغر» في يوم واحد بنفس السعر. ويُفرَّغ ما يخصّ المسافر وحده.
-      setSaved(`✓ سُجّل طلب ${v.full_name}`)
+      setSaved(`سُجّل طلب ${v.full_name}`)
       setV((s) => ({ ...s, full_name: "", passport_no: "", phone: "", approval_ref: "", notes: "" }))
       nameRef.current?.focus()
     } catch {
@@ -239,6 +244,7 @@ export function ApprovalForm({
 
       <DateField
         id={id("date")}
+        tone="dark"
         label="تاريخ التقديم *"
         value={v.apply_date}
         onChange={(d) => setV((s) => ({ ...s, apply_date: d }))}
@@ -249,6 +255,7 @@ export function ApprovalForm({
         <div className="grid grid-cols-2 gap-1.5" role="radiogroup">
           {STATUSES.map((s) => {
             const on = v.status === s
+            const Icon = STATUS_ICON[s]
             return (
               <button
                 key={s}
@@ -256,11 +263,11 @@ export function ApprovalForm({
                 role="radio"
                 aria-checked={on}
                 onClick={() => setV((x) => ({ ...x, status: s }))}
-                className={`flex h-11 items-center justify-center gap-1 rounded-xl text-sm font-bold ring-1 transition ${
-                  on ? `${STATUS_STYLE[s].badge} ring-2` : "bg-white text-slate-500 ring-slate-200"
+                className={`flex h-11 items-center justify-center gap-1.5 rounded-xl text-sm font-bold ring-1 transition ${
+                  on ? `${STATUS_STYLE[s].tint} ${STATUS_STYLE[s].text} ring-2` : "bg-[#07111C] text-[#7D8EA3] ring-white/10 hover:text-[#A7B4C3]"
                 }`}
               >
-                <span aria-hidden>{STATUS_STYLE[s].icon}</span>
+                <Icon className="h-4 w-4" aria-hidden />
                 {STATUS_STYLE[s].short}
               </button>
             )
@@ -268,9 +275,12 @@ export function ApprovalForm({
         </div>
       </fieldset>
 
-      <div className="space-y-2.5 rounded-xl bg-slate-50 p-3 ring-1 ring-slate-200">
+      <div className={`space-y-3 p-3 ${T.inset}`}>
         <div className="flex items-center justify-between gap-2">
-          <p className="text-xs font-extrabold text-slate-700">المبالغ بالدولار</p>
+          <p className={`flex items-center gap-1.5 text-xs font-extrabold ${T.sub}`}>
+            <Sparkles className="h-3.5 w-3.5 text-[#F7A04B]" aria-hidden />
+            المبالغ بالدولار
+          </p>
           {presets.length > 0 && (
             <div className="flex flex-wrap justify-end gap-1">
               {presets.map((p) => (
@@ -279,7 +289,7 @@ export function ApprovalForm({
                   type="button"
                   data-preset
                   onClick={() => setV((s) => ({ ...s, sale_price: String(p.sale), cost_price: String(p.cost) }))}
-                  className="rounded-lg bg-white px-2 py-1 text-[11px] font-bold text-[#164563] ring-1 ring-slate-200 hover:ring-[#164563]"
+                  className="rounded-lg bg-white/[0.05] px-2 py-1 text-[11px] font-bold text-[#F7A04B] ring-1 ring-white/10 transition hover:ring-[#EF790F]/60"
                   title={`سعر ${usd(p.sale)} — تكلفة ${usd(p.cost)}`}
                 >
                   <bdi dir="ltr">
@@ -326,18 +336,23 @@ export function ApprovalForm({
           </div>
         </div>
 
-        <label className="flex cursor-pointer items-center gap-2 text-sm font-semibold text-slate-700">
-          <input
-            type="checkbox"
-            name="paid_in_full"
-            checked={paidInFull}
-            onChange={(e) => {
-              setPaidInFull(e.target.checked)
-              if (!e.target.checked) setV((s) => ({ ...s, paid_amount: "" }))
-            }}
-            className="h-5 w-5 accent-[#164563]"
-          />
+        <label className={`flex cursor-pointer items-center justify-between gap-2 text-sm font-semibold ${T.sub}`}>
           دفع العميل المبلغ كاملاً
+          {/* مفتاحٌ مرسوم فوق checkbox حقيقي: لوحة المفاتيح وقارئ الشاشة يعملان كما هما */}
+          <span className="relative inline-flex h-6 w-11 shrink-0">
+            <input
+              type="checkbox"
+              name="paid_in_full"
+              checked={paidInFull}
+              onChange={(e) => {
+                setPaidInFull(e.target.checked)
+                if (!e.target.checked) setV((s) => ({ ...s, paid_amount: "" }))
+              }}
+              className="peer absolute inset-0 z-10 cursor-pointer opacity-0"
+            />
+            <span aria-hidden className="absolute inset-0 rounded-full bg-white/10 transition peer-checked:bg-[#199e70] peer-focus-visible:ring-2 peer-focus-visible:ring-[#EF790F]/70" />
+            <span aria-hidden className="absolute right-0.5 top-0.5 h-5 w-5 rounded-full bg-white shadow transition peer-checked:-translate-x-5" />
+          </span>
         </label>
 
         {!paidInFull && (
@@ -359,11 +374,11 @@ export function ApprovalForm({
           </div>
         )}
 
-        <div className="flex items-center justify-between border-t border-slate-200 pt-2 text-sm" data-live>
-          <span className={`font-extrabold ${profit >= 0 ? "text-emerald-700" : "text-red-700"}`}>
+        <div className="flex items-center justify-between border-t border-white/[0.06] pt-2.5 text-sm" data-live>
+          <span className={`font-extrabold ${profit >= 0 ? T.good : T.bad}`}>
             الربح <bdi dir="ltr">{usd(profit)}</bdi>
           </span>
-          <span className={`font-bold ${remaining > 0 ? "text-red-700" : remaining < 0 ? "text-red-700" : "text-slate-500"}`}>
+          <span className={`font-bold ${remaining !== 0 ? T.bad : T.muted}`}>
             {remaining > 0 ? (
               <>
                 متبقٍّ على العميل <bdi dir="ltr">{usd(remaining)}</bdi>
@@ -371,7 +386,7 @@ export function ApprovalForm({
             ) : remaining < 0 ? (
               "المدفوع أكبر من السعر"
             ) : (
-              "خالص ✓"
+              "خالص"
             )}
           </span>
         </div>
@@ -393,12 +408,13 @@ export function ApprovalForm({
       </div>
 
       {error && (
-        <p role="alert" className="rounded-lg bg-red-50 px-3 py-2 text-sm font-medium text-red-700">
+        <p role="alert" className="rounded-xl bg-[#e66767]/15 px-3 py-2.5 text-sm font-bold text-[#FCA5A5] ring-1 ring-[#e66767]/30">
           {error}
         </p>
       )}
       {saved && (
-        <p role="status" className="rounded-lg bg-emerald-50 px-3 py-2 text-sm font-bold text-emerald-700">
+        <p role="status" className="flex items-center gap-2 rounded-xl bg-[#199e70]/15 px-3 py-2.5 text-sm font-bold text-[#6EE7B7] ring-1 ring-[#199e70]/30">
+          <CircleCheck className="h-4 w-4 shrink-0" aria-hidden />
           {saved}
         </p>
       )}
@@ -408,7 +424,7 @@ export function ApprovalForm({
           <button
             type="button"
             onClick={onCancel}
-            className="h-12 flex-1 rounded-xl border border-slate-300 bg-white font-bold text-slate-600"
+            className={`${T.ghost} h-12 flex-1`}
           >
             إلغاء
           </button>
@@ -416,8 +432,9 @@ export function ApprovalForm({
         <button
           type="submit"
           disabled={busy}
-          className="h-12 flex-[2] rounded-xl bg-[#EF790F] text-base font-extrabold text-white shadow-sm transition active:scale-[0.99] disabled:opacity-50"
+          className={`${T.primary} h-12 flex-[2] text-base`}
         >
+          {busy && <LoaderCircle className="h-4 w-4 animate-spin" aria-hidden />}
           {busy ? "جارٍ الحفظ…" : editing ? "حفظ التعديل" : "حفظ الطلب"}
         </button>
       </div>
