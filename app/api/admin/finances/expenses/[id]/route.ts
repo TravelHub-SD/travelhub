@@ -1,5 +1,5 @@
 import { type NextRequest, NextResponse } from "next/server"
-import { errorResponse, financeToken, NO_SESSION } from "@/lib/finance-auth"
+import { adminToken, errorResponse, NO_SESSION } from "@/lib/admin-auth"
 import { deleteExpense, updateExpense } from "@/lib/finance-store"
 import { isUuid, validateExpense } from "@/lib/finance-validate"
 
@@ -16,7 +16,7 @@ async function idFrom(ctx: Ctx): Promise<string | null> {
 }
 
 export async function PATCH(request: NextRequest, ctx: Ctx) {
-  const token = await financeToken()
+  const token = await adminToken()
   if (!token) return NextResponse.json(NO_SESSION, { status: 401 })
   const id = await idFrom(ctx)
   if (!id) return NextResponse.json({ error: "معرّف غير صحيح" }, { status: 400 })
@@ -32,7 +32,7 @@ export async function PATCH(request: NextRequest, ctx: Ctx) {
 }
 
 export async function DELETE(_request: NextRequest, ctx: Ctx) {
-  const token = await financeToken()
+  const token = await adminToken()
   if (!token) return NextResponse.json(NO_SESSION, { status: 401 })
   const id = await idFrom(ctx)
   if (!id) return NextResponse.json({ error: "معرّف غير صحيح" }, { status: 400 })

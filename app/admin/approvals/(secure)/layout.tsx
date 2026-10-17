@@ -1,0 +1,27 @@
+import type { Metadata } from "next"
+import type React from "react"
+import { AdminHeader } from "@/components/admin/admin-header"
+import { adminToken, otherSections } from "@/lib/admin-auth"
+import { SECTIONS } from "@/lib/admin-sections"
+
+export const metadata: Metadata = {
+  title: "الموافقات الأمنية",
+  robots: { index: false, follow: false, nocache: true },
+}
+
+// بيانات عملاء تتغيّر مع كل طلب — لا تُخبّأ أبداً.
+export const dynamic = "force-dynamic"
+
+// لا حارس هنا عمداً: redirect() في layout لا يمنع رسم الصفحة تحته. الحارس
+// في proxy.ts، والحكم في القاعدة نفسها، والصفحة تتعامل مع رفضها.
+export default async function SecureApprovalsLayout({ children }: { children: React.ReactNode }) {
+  const s = SECTIONS.approvals
+  const token = await adminToken()
+  const links = token ? await otherSections(token, s.key) : []
+  return (
+    <div dir="rtl" className="min-h-dvh bg-[#F5F8FA] text-slate-800">
+      <AdminHeader title={s.title} logoutEndpoint={s.authApi} loginPath={s.login} links={links} />
+      <main className="mx-auto max-w-6xl px-3 py-4 pb-24">{children}</main>
+    </div>
+  )
+}

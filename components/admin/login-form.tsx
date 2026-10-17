@@ -6,7 +6,8 @@ import { useRouter } from "next/navigation"
 const FIELD =
   "h-14 w-full rounded-xl border border-slate-300 bg-white px-4 text-base outline-none focus:border-[#EF790F] focus:ring-2 focus:ring-[#EF790F]/30"
 
-export function FinanceLoginForm({ next }: { next: string }) {
+// endpoint: مسار دخول القسم — كلٌّ يتحقّق من أهليّته هو قبل أن يعطي الجلسة.
+export function AdminLoginForm({ endpoint, next }: { endpoint: string; next: string }) {
   const router = useRouter()
   const [email, setEmail] = useState("")
   const [password, setPassword] = useState("")
@@ -18,7 +19,7 @@ export function FinanceLoginForm({ next }: { next: string }) {
     setBusy(true)
     setError("")
     try {
-      const res = await fetch("/api/admin/finances/auth", {
+      const res = await fetch(endpoint, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ email, password }),

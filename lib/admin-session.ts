@@ -1,8 +1,9 @@
 /**
- * lib/finance-session.ts
+ * lib/admin-session.ts
  * ─────────────────────────────────────────────────────────────
- * جلسة قسم المنصرفات الشخصية — Supabase Auth عبر REST مباشرة، بلا SDK،
- * كبقيّة المشروع.
+ * جلسة أقسام /admin (المنصرفات الشخصية، الموافقات الأمنية) — Supabase
+ * Auth عبر REST مباشرة، بلا SDK، كبقيّة المشروع. جلسة واحدة للأقسام
+ * كلها؛ ما يحقّ لكلٍّ أن يراه يقرّره القسم نفسه (lib/admin-sections.ts).
  *
  * لماذا Supabase Auth هنا لا كلمة مرور اللوحة: قاعدة البيانات لا تعرف
  * من صاحب الطلب إلا من JWT صادرٍ عنها. بالجلسة الحقيقية يصير
@@ -13,15 +14,19 @@
  * ─────────────────────────────────────────────────────────────
  */
 
+// الاسمان من أيام كان القسم الوحيد هو المالية. تغييرهما كان سيُخرج كل
+// جلسة قائمة بلا فائدة، فبقيا.
+import type { AdminSection } from "@/lib/admin-sections"
+
 export const ACCESS_COOKIE = "th_fin_at"
 export const REFRESH_COOKIE = "th_fin_rt"
 
 const URL_BASE = (process.env.SUPABASE_URL || "").replace(/\/$/, "")
 // المفتاح العام (publishable / anon). ليس سرّاً بطبيعته، لكنه يبقى على
-// الخادم هنا: المتصفح لا يكلّم Supabase أبداً في هذا القسم.
+// الخادم هنا: المتصفح لا يكلّم Supabase أبداً في هذه الأقسام.
 const PUBLIC_KEY = process.env.SUPABASE_PUBLISHABLE_KEY || process.env.SUPABASE_ANON_KEY || ""
 
-export const financeConfigured = Boolean(URL_BASE && PUBLIC_KEY)
+export const adminConfigured = Boolean(URL_BASE && PUBLIC_KEY)
 
 export function supabaseUrl(): string {
   return URL_BASE
@@ -132,12 +137,12 @@ export async function signOut(accessToken: string): Promise<void> {
 }
 
 /**
- * هل صاحب الجلسة مالكٌ مسجَّل في finance_owners؟ يسأل القاعدة بجلسته
- * هو، فالجواب عنه وحده. null = الرمز نفسه مرفوض (مزوّر أو منتهٍ).
+ * هل صاحب الجلسة من أهل هذا القسم؟ يسأل القاعدة بدالة القسم وبجلسته هو،
+ * فالجواب عنه وحده. null = الرمز نفسه مرفوض (مزوّر أو منتهٍ).
  */
-export async function isFinanceOwner(accessToken: string): Promise<boolean | null> {
+export async function hasSectionAccess(accessToken: string, section: AdminSection): Promise<boolean | null> {
   try {
-    const res = await fetch(`${URL_BASE}/rest/v1/rpc/is_finance_owner`, {
+    const res = await fetch(`${URL_BASE}/rest/v1/rpc/${section.accessRpc}`, {
       method: "POST",
       headers: { apikey: PUBLIC_KEY, Authorization: `Bearer ${accessToken}`, "Content-Type": "application/json" },
       body: "{}",
@@ -151,10 +156,11 @@ export async function isFinanceOwner(accessToken: string): Promise<boolean | nul
   }
 }
 
-/** وجهة ما بعد الدخول — داخل القسم فقط، فلا يصير الرابط تحويلاً مفتوحاً. */
-export function safeNext(next: string | null | undefined): string {
-  const fallback = "/admin/finances/personal"
-  if (!next || !next.startsWith("/admin/finances/") || next.startsWith("//")) return fallback
-  if (next.startsWith("/admin/finances/login")) return fallback
+/** وجهة ما بعد الدخول — داخل القسم نفسه فقط، فلا يصير الرابط تحويلاً مفتوحاً. */
+export function safeNext(next: string | null | undefined, section: AdminSection): string {
+  if (!next || next.startsWith("//") || next.startsWith(section.login)) return section.home
+  if (next !== section.base && !next.startsWith(`${section.base}/`) && !next.startsWith(`${section.base}?`)) {
+    return section.home
+  }
   return next
 }
