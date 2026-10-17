@@ -28,7 +28,7 @@ function rest<T>(token: string, path: string, init: RequestInit = {}): Promise<T
 }
 
 const COLUMNS =
-  "id,full_name,passport_no,phone,agent,apply_date,status,approval_ref,sale_price,cost_price,paid_amount,notes,legacy_id,created_at,updated_at"
+  "id,full_name,passport_no,phone,agent,apply_date,status,approval_ref,sale_price,cost_price,paid_amount,notes,legacy_id,created_at,updated_at,approved_at,delivered_at,rejected_at"
 
 /** كل الطلبات، الأحدث أولاً. الفلترة والبحث في المتصفح: آلاف الصفوف لا تُثقل. */
 export async function listApprovals(token: string): Promise<Approval[]> {

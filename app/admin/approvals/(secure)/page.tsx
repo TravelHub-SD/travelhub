@@ -7,8 +7,9 @@ import { ApprovalsBoard } from "@/components/approvals/approvals-board"
 
 export const dynamic = "force-dynamic"
 
-export default async function ApprovalsPage() {
+export default async function ApprovalsPage({ searchParams }: { searchParams: Promise<{ view?: string }> }) {
   const s = SECTIONS.approvals
+  const view = (await searchParams).view === "analytics" ? "analytics" : "list"
   const token = await adminToken()
   if (!token) redirect(`${s.login}?next=${encodeURIComponent(s.home)}`)
 
@@ -27,18 +28,18 @@ export default async function ApprovalsPage() {
   if (failure === "auth") redirect(`${s.login}?next=${encodeURIComponent(s.home)}`)
   if (failure === "forbidden") {
     return (
-      <p role="alert" className="rounded-2xl bg-amber-50 p-6 text-center text-sm font-medium text-amber-800">
+      <p role="alert" className="rounded-2xl bg-[#c98500]/15 p-6 text-center text-sm font-bold text-[#FCD34D] ring-1 ring-[#c98500]/35">
         {s.denied}.
       </p>
     )
   }
   if (error) {
     return (
-      <p role="alert" className="rounded-2xl bg-red-50 p-6 text-center text-sm font-medium text-red-700">
+      <p role="alert" className="rounded-2xl bg-[#e66767]/15 p-6 text-center text-sm font-bold text-[#FCA5A5] ring-1 ring-[#e66767]/35">
         {error}
       </p>
     )
   }
 
-  return <ApprovalsBoard rows={rows} />
+  return <ApprovalsBoard rows={rows} initialView={view} />
 }

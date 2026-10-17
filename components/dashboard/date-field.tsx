@@ -42,6 +42,7 @@ export function DateField({
   allowFuture = false,
   placeholder = "اختر التاريخ",
   compact = false,
+  tone = "light",
 }: {
   id: string
   value: string
@@ -51,6 +52,8 @@ export function DateField({
   placeholder?: string
   // في شريط الفلاتر تصطفّ الحقول مع قوائم بارتفاع ٤٤؛ في الفورم ٥٦.
   compact?: boolean
+  // قسم الموافقات داكن؛ لوحة العمليات والمنصرفات فاتحة كما هي.
+  tone?: "light" | "dark"
 }) {
   const [open, setOpen] = useState(false)
   const selected = value ? parseISO(value) : null
@@ -58,6 +61,7 @@ export function DateField({
   const box = useRef<HTMLDivElement>(null)
 
   const today = startOfToday()
+  const dark = tone === "dark"
 
   const days = useMemo(
     () =>
@@ -101,7 +105,7 @@ export function DateField({
   return (
     <div className="relative" ref={box}>
       {label && (
-        <label htmlFor={id} className="mb-1.5 block text-sm font-semibold text-[#164563]">
+        <label htmlFor={id} className={dark ? "mb-1.5 block text-xs font-bold text-[#A7B4C3]" : "mb-1.5 block text-sm font-semibold text-[#164563]"}>
           {label}
         </label>
       )}
@@ -112,16 +116,16 @@ export function DateField({
         onClick={() => setOpen((o) => !o)}
         aria-haspopup="dialog"
         aria-expanded={open}
-        className={`flex w-full items-center justify-between gap-2 rounded-xl border bg-white transition ${
-          compact ? "h-11 px-3 text-sm" : "h-14 px-4 text-base"
+        className={`flex w-full items-center justify-between gap-2 rounded-xl border transition ${
+          dark ? "h-12 border-transparent bg-[#07111C] px-3.5 text-base ring-1 ring-white/10" : compact ? "h-11 bg-white px-3 text-sm" : "h-14 bg-white px-4 text-base"
         } ${
-          open ? "border-[#EF790F] ring-2 ring-[#EF790F]/30" : "border-slate-300"
+          open ? (dark ? "ring-2 ring-[#EF790F]/70" : "border-[#EF790F] ring-2 ring-[#EF790F]/30") : dark ? "" : "border-slate-300"
         }`}
       >
-        <span className={selected ? "truncate font-semibold text-slate-800" : "truncate text-slate-400"}>
+        <span className={selected ? `truncate font-semibold ${dark ? "text-[#EEF2F7]" : "text-slate-800"}` : `truncate ${dark ? "text-[#7D8EA3]" : "text-slate-400"}`}>
           {selected ? format(selected, "EEEE، d MMMM yyyy", { locale: ar }) : placeholder}
         </span>
-        <CalIcon className="h-4 w-4 shrink-0 text-slate-400" />
+        <CalIcon className={`h-4 w-4 shrink-0 ${dark ? "text-[#7D8EA3]" : "text-slate-400"}`} />
       </button>
 
       {/* القيمة الحقيقية للفورم — الزرّ أعلاه واجهة فقط */}
@@ -131,7 +135,7 @@ export function DateField({
         <div
           role="dialog"
           aria-label="اختيار التاريخ"
-          className="absolute z-50 mt-1 w-full rounded-2xl border border-slate-200 bg-white p-3 shadow-xl"
+          className={`absolute z-50 mt-1 w-full rounded-2xl p-3 shadow-xl ${dark ? "bg-[#13233A] ring-1 ring-white/10" : "border border-slate-200 bg-white"}`}
         >
           <div className="mb-3 flex gap-1.5">
             {shortcuts.map((s) => {
@@ -142,7 +146,7 @@ export function DateField({
                   type="button"
                   onClick={() => pick(s.date)}
                   className={`h-9 flex-1 rounded-lg text-xs font-bold transition ${
-                    on ? "bg-[#164563] text-white" : "bg-slate-100 text-slate-600 active:bg-slate-200"
+                    on ? (dark ? "bg-[#EF790F] text-[#07111C]" : "bg-[#164563] text-white") : dark ? "bg-white/[0.05] text-[#A7B4C3]" : "bg-slate-100 text-slate-600 active:bg-slate-200"
                   }`}
                 >
                   {s.label}
@@ -156,16 +160,16 @@ export function DateField({
               type="button"
               onClick={() => setView(addMonths(view, 1))}
               disabled={!allowFuture && isAfter(startOfMonth(addMonths(view, 1)), today)}
-              className="flex h-9 w-9 items-center justify-center rounded-lg text-slate-600 active:bg-slate-100 disabled:opacity-30"
+              className={`flex h-9 w-9 items-center justify-center rounded-lg disabled:opacity-30 ${dark ? "text-[#A7B4C3] active:bg-white/10" : "text-slate-600 active:bg-slate-100"}`}
               aria-label="الشهر التالي"
             >
               <ChevronLeft className="h-4 w-4" />
             </button>
-            <span className="font-bold text-[#164563]">{format(view, "MMMM yyyy", { locale: ar })}</span>
+            <span className={`font-bold ${dark ? "text-[#EEF2F7]" : "text-[#164563]"}`}>{format(view, "MMMM yyyy", { locale: ar })}</span>
             <button
               type="button"
               onClick={() => setView(addMonths(view, -1))}
-              className="flex h-9 w-9 items-center justify-center rounded-lg text-slate-600 active:bg-slate-100"
+              className={`flex h-9 w-9 items-center justify-center rounded-lg ${dark ? "text-[#A7B4C3] active:bg-white/10" : "text-slate-600 active:bg-slate-100"}`}
               aria-label="الشهر السابق"
             >
               <ChevronRight className="h-4 w-4" />
@@ -174,7 +178,7 @@ export function DateField({
 
           <div className="mb-1 grid grid-cols-7 gap-1">
             {WEEKDAYS.map((d) => (
-              <div key={d} className="py-1 text-center text-[11px] font-medium text-slate-400">
+              <div key={d} className={`py-1 text-center text-[11px] font-medium ${dark ? "text-[#7D8EA3]" : "text-slate-400"}`}>
                 {d}
               </div>
             ))}
@@ -194,14 +198,16 @@ export function DateField({
                   onClick={() => pick(day)}
                   className={`h-11 rounded-lg text-sm transition ${
                     isSel
-                      ? "bg-[#164563] font-bold text-white"
+                      ? dark
+                        ? "bg-[#EF790F] font-bold text-[#07111C]"
+                        : "bg-[#164563] font-bold text-white"
                       : disabled
-                        ? "cursor-not-allowed text-slate-200"
+                        ? `cursor-not-allowed ${dark ? "text-white/15" : "text-slate-200"}`
                         : isToday
-                          ? "font-bold text-[#EF790F] ring-1 ring-[#EF790F]/40"
+                          ? `font-bold ring-1 ring-[#EF790F]/40 ${dark ? "text-[#F7A04B]" : "text-[#EF790F]"}`
                           : outside
-                            ? "text-slate-300"
-                            : "text-slate-700 active:bg-[#EF790F]/10"
+                            ? dark ? "text-white/25" : "text-slate-300"
+                            : dark ? "text-[#D5DDE6] active:bg-[#EF790F]/15" : "text-slate-700 active:bg-[#EF790F]/10"
                   }`}
                 >
                   {format(day, "d")}

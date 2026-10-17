@@ -27,6 +27,8 @@ export interface AdminSection {
   /** دالة القاعدة التي تجيب: هل صاحب الجلسة من أهل هذا القسم؟ */
   accessRpc: string
   denied: string
+  /** طابع القسم: الموافقات داكنة، والمنصرفات فاتحة كما بُنيت */
+  theme: "light" | "dark"
 }
 
 export const SECTIONS: Record<SectionKey, AdminSection> = {
@@ -41,6 +43,7 @@ export const SECTIONS: Record<SectionKey, AdminSection> = {
     authApi: "/api/admin/finances/auth",
     accessRpc: "is_finance_owner",
     denied: "هذا الحساب غير مخوّل لقسم المنصرفات",
+    theme: "light",
   },
   approvals: {
     key: "approvals",
@@ -53,6 +56,7 @@ export const SECTIONS: Record<SectionKey, AdminSection> = {
     authApi: "/api/admin/approvals/auth",
     accessRpc: "is_approvals_staff",
     denied: "هذا الحساب غير مخوّل لإدارة الموافقات",
+    theme: "dark",
   },
 }
 

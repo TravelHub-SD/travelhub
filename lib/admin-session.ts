@@ -75,6 +75,17 @@ export function tokenExpiry(jwt: string): number {
   }
 }
 
+/** بريد صاحب الجلسة من الرمز — للعرض في الرأس فقط، لا لأي قرار صلاحية. */
+export function tokenEmail(jwt: string): string | null {
+  try {
+    const part = jwt.split(".")[1]
+    const json = JSON.parse(atob(part.replace(/-/g, "+").replace(/_/g, "/")))
+    return typeof json.email === "string" ? json.email : null
+  } catch {
+    return null
+  }
+}
+
 /** صالح لدقيقة أخرى على الأقل؟ الهامش يمنع انتهاءه في منتصف الطلب. */
 export function isFresh(jwt: string | undefined): boolean {
   if (!jwt) return false

@@ -26,6 +26,11 @@ export interface Approval {
   legacy_id: string | null
   created_at: string
   updated_at: string
+  // تملؤها القاعدة عند تغيّر الحالة (security-approvals-timeline.sql).
+  // فارغةٌ للطلبات المستوردة: الأداة القديمة لم تسجّل التوقيت.
+  approved_at: string | null
+  delivered_at: string | null
+  rejected_at: string | null
 }
 
 export interface ApprovalInput {
@@ -42,12 +47,17 @@ export interface ApprovalInput {
   notes: string | null
 }
 
-/** عرض كل حالة: لونٌ وأيقونة **وكلمة** — الحالة لا تُحمَّل على اللون وحده. */
-export const STATUS_STYLE: Record<ApprovalStatus, { icon: string; short: string; badge: string; dot: string }> = {
-  "قيد الإجراء": { icon: "⏳", short: "قيد الإجراء", badge: "bg-amber-50 text-amber-800 ring-amber-200", dot: "bg-amber-500" },
-  "صدرت الموافقة": { icon: "✅", short: "صدرت", badge: "bg-emerald-50 text-emerald-800 ring-emerald-200", dot: "bg-emerald-500" },
-  "تم التسليم": { icon: "📬", short: "سُلّمت", badge: "bg-sky-50 text-sky-800 ring-sky-200", dot: "bg-sky-500" },
-  مرفوضة: { icon: "❌", short: "مرفوضة", badge: "bg-red-50 text-red-800 ring-red-200", dot: "bg-red-500" },
+/**
+ * عرض كل حالة على الخلفية الداكنة: لونٌ وأيقونة **وكلمة** — الحالة لا
+ * تُحمَّل على اللون وحده. color للرسوم: الأربعة اجتازت فحص عمى الألوان
+ * (CVD) والتباين على سطح البطاقات #0E1A28 بهذا الترتيب. text للكتابة
+ * فوق الصبغة، بتباين ٩:١ فأكثر.
+ */
+export const STATUS_STYLE: Record<ApprovalStatus, { short: string; color: string; text: string; tint: string }> = {
+  "قيد الإجراء": { short: "قيد الإجراء", color: "#c98500", text: "text-[#FCD34D]", tint: "bg-[#c98500]/15 ring-[#c98500]/35" },
+  "صدرت الموافقة": { short: "صدرت", color: "#199e70", text: "text-[#6EE7B7]", tint: "bg-[#199e70]/15 ring-[#199e70]/35" },
+  "تم التسليم": { short: "سُلّمت", color: "#3987e5", text: "text-[#93C5FD]", tint: "bg-[#3987e5]/15 ring-[#3987e5]/35" },
+  مرفوضة: { short: "مرفوضة", color: "#e66767", text: "text-[#FCA5A5]", tint: "bg-[#e66767]/15 ring-[#e66767]/35" },
 }
 
 /** الخطوة التالية الطبيعية — الرفض ليس «تالياً» لأحد. الأداة القديمة كانت
